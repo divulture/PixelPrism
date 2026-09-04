@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>PixelPrism</title>
+    <link rel="icon" type="image/png" sizes="16x16" href="icons/pulse-16.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/pulse-32.png">
+    <link rel="stylesheet" href="studio.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="toolbar">
+        <div class="toolbar-start">
+          <a class="brand" href="studio.html" aria-label="New session">
+            <span class="brand-mark" aria-hidden="true"><img src="icons/pulse-brand.png" alt="" width="30" height="30"></span>
+          </a>
+          <form class="address-bar" id="address-form">
+            <label class="sr-only" for="page-url">Page URL to inspect</label>
+            <img class="site-favicon" id="site-favicon" alt="" width="16" height="16">
+            <button class="address-display" id="address-display" type="button" aria-label="Edit website address"></button>
+            <input id="page-url" name="url" type="url" inputmode="url" autocomplete="url" spellcheck="false" placeholder="URL to inspect" aria-label="Website address">
+          </form>
+        </div>
+
+        <div class="controlbar" aria-label="Choose viewports">
+          <div class="device-picker-scroll">
+            <div class="device-picker" role="group" aria-label="Choose viewports"></div>
+          </div>
+          <button type="button" class="device-button custom-trigger" id="custom-trigger" aria-label="New viewport" data-tooltip="New viewport">
+            <span class="custom-plus" data-phosphor-icon="plus"></span>
+          </button>
+        </div>
+
+        <div class="toolbar-end">
+        <div class="zoom-control" role="group" aria-label="Zoom all previews">
+          <button class="zoom-button" type="button" data-zoom="out" aria-label="Zoom out">−</button>
+          <output class="zoom-value" id="zoom-value" aria-live="polite">100%</output>
+          <button class="zoom-button" type="button" data-zoom="in" aria-label="Zoom in">+</button>
+        </div>
+        </div>
+      </header>
+
+      <section class="notice" id="embed-notice" hidden>
+        <span aria-hidden="true">!</span>
+        <p>Some websites block embedding. If the page does not load, open it in a separate tab.</p>
+      </section>
+
+      <section class="workspace" id="preview" aria-label="Selected viewport previews">
+        <div class="viewport-grid" id="viewport-grid"></div>
+        <section class="empty-state" id="empty-state" hidden aria-labelledby="empty-title">
+          <div class="empty-morph" aria-hidden="true"><span class="morph-frame"><i class="morph-home"></i></span><i class="morph-stand"></i></div>
+          <h1 id="empty-title">PixelPrism</h1>
+          <p>Enter a website address above to open it in the selected viewports.</p>
+        </section>
+      </section>
+    </main>
+    <nav class="mode-dock" aria-label="Studio modes">
+      <button class="mode-dock-button cursor-toggle" id="cursor-toggle" type="button" aria-label="Cursor" title="Cursor (V)" aria-keyshortcuts="V" aria-pressed="true">
+        <span data-phosphor-icon="cursor"></span>
+      </button>
+      <button class="mode-dock-button inspector-toggle" id="inspector-toggle" type="button" aria-label="Inspector" title="Inspector (I)" aria-keyshortcuts="I" aria-pressed="false" aria-controls="inspector-panel">
+        <span data-phosphor-icon="magnifying-glass"></span>
+      </button>
+      <button class="mode-dock-button comments-toggle" id="comments-toggle" type="button" aria-label="Comments" title="Comments (C)" aria-keyshortcuts="C" aria-pressed="false" aria-controls="comments-panel">
+        <span data-phosphor-icon="chat-circle-text"></span>
+        <span class="comments-count" id="comments-count" hidden aria-hidden="true"></span>
+      </button>
+      <button class="mode-dock-button layers-toggle" id="layers-toggle" type="button" aria-label="Layers" title="Layers (L)" aria-keyshortcuts="L" aria-pressed="false" aria-controls="layers-panel">
+        <span data-phosphor-icon="stack"></span>
+      </button>
+    </nav>
+    <aside class="layers-panel" id="layers-panel" hidden aria-labelledby="layers-title">
+      <header class="layers-panel-header">
+        <div><h2 id="layers-title">Layers</h2><p id="layers-viewport" class="layers-viewport">Active preview</p></div>
+        <button type="button" class="layers-panel-close" id="layers-panel-close" aria-label="Close Layers" title="Close Layers"><span data-phosphor-icon="x"></span></button>
+      </header>
+      <div class="layers-tree" id="layers-tree" role="tree" aria-label="Page layers" aria-busy="false"></div>
+      <p class="layers-empty" id="layers-empty" hidden>Select a loaded preview to browse its layers.</p>
+    </aside>
+    <aside class="inspector-panel" id="inspector-panel" hidden aria-labelledby="inspector-title">
+      <header class="inspector-panel-header">
+        <div class="inspector-panel-heading"><h2 id="inspector-title"></h2><p class="inspector-panel-selector" id="inspector-selector"></p></div>
+        <button type="button" class="inspector-panel-close" id="inspector-panel-close" aria-label="Close inspector" title="Close inspector"><span data-phosphor-icon="x"></span></button>
+      </header>
+      <form class="inspector-panel-fields" id="inspector-panel-fields"></form>
+    </aside>
+    <aside class="comments-panel" id="comments-panel" hidden aria-labelledby="comments-title">
+      <header class="comments-panel-header">
+        <div><h2 id="comments-title">Comments</h2><p id="comments-context">Page instruction</p></div>
+        <button type="button" class="comments-panel-close" id="comments-panel-close" aria-label="Close Comments" title="Close Comments"><span data-phosphor-icon="x"></span></button>
+      </header>
+      <form class="comments-form" id="comments-form">
+        <textarea id="comment-input" name="comment" rows="4" maxlength="2000" aria-label="Comment" placeholder="Write a note for the agent..."></textarea>
+        <button type="submit">Add</button>
+      </form>
+      <section class="comments-list-wrap" aria-labelledby="comments-list-title">
+        <h3 id="comments-list-title">Pending notes</h3>
+        <ol class="comments-list" id="comments-list"></ol>
+        <p class="comments-empty" id="comments-empty">No comments added yet.</p>
+      </section>
+    </aside>
+    <div class="handoff-fab" id="handoff-fab" hidden>
+      <button class="handoff-fab-toggle" id="handoff-fab-toggle" type="button" aria-label="Open changes handoff" title="Changes handoff" aria-expanded="false">
+        <span data-phosphor-icon="download"></span>
+      </button>
+      <div class="handoff-fab-menu" id="handoff-fab-menu" hidden>
+        <button class="handoff-fab-action" id="change-report-button" type="button">Download .md</button>
+        <button class="handoff-fab-action" id="copy-codex-button" type="button">Copy for Codex</button>
+        <button class="handoff-fab-close" id="handoff-fab-close" type="button">Close</button>
+      </div>
+    </div>
+    <div class="status sr-only" id="status" role="status" aria-live="polite"></div>
+    <output class="toast" id="toast" role="status" aria-live="polite" hidden></output>
+    <template id="viewport-template">
+      <article class="viewport-card">
+        <header class="viewport-card-header">
+          <div><span class="viewport-name"></span><span class="viewport-size"></span></div>
+          <div class="card-actions">
+            <button class="contrast-button tooltip-trigger" type="button" aria-pressed="false" aria-label="Layout grid" data-tooltip="Layout grid">
+              <span data-phosphor-icon="squares-four"></span>
+            </button>
+            <button class="capture-button tooltip-trigger" type="button" aria-label="Capture visible area" data-tooltip="Capture visible area">
+              <span data-phosphor-icon="camera"></span>
+            </button>
+            <button class="apply-button tooltip-trigger" type="button" aria-label="Apply changes to source file" data-tooltip="Apply changes to source file" hidden disabled>
+              <span data-phosphor-icon="floppy-disk"></span>
+            </button>
+            <details class="more-actions">
+              <summary class="tooltip-trigger" aria-label="More actions" data-tooltip="More actions"><span data-phosphor-icon="dots-three-outline"></span></summary>
+              <div class="more-actions-menu">
+                <button class="refresh-button" type="button">Refresh page</button>
+                <button class="solo-button" type="button">Switch to View</button>
+              </div>
+            </details>
+          </div>
+        </header>
+        <div class="viewport-frame">
+          <div class="viewport-scale"><iframe title="Page preview" loading="eager"></iframe></div>
+          <section class="embed-blocked" hidden aria-label="Website cannot be shown in the preview">
+            <div class="embed-icon" aria-hidden="true"><span data-phosphor-icon="file-text"></span></div>
+            <h2>Website cannot be shown in the preview</h2>
+            <p>This service blocks page embedding in an iframe. The screen size is not the issue.</p>
+          </section>
+        </div>
+        <div class="resize-edge" role="slider" tabindex="0" aria-label="Resize viewport width" aria-valuemin="320" aria-valuemax="100000">
+          <div class="breakpoint-callout"><strong></strong><span></span></div>
+        </div>
+        <div class="resize-bottom" role="slider" tabindex="0" aria-label="Resize viewport height" aria-valuemin="320" aria-valuemax="100000">
+          <div class="height-callout"></div>
+        </div>
+      </article>
+    </template>
+    <section class="custom-dialog" id="custom-dialog" popover="auto" role="dialog" aria-modal="false" aria-labelledby="custom-title">
+      <form id="custom-form">
+        <div class="dialog-heading"><h2 id="custom-title">New viewport</h2><button type="button" class="dialog-close" aria-label="Close"><span data-phosphor-icon="x"></span></button></div>
+        <label>Preset
+          <select id="custom-preset" name="preset">
+            <option value="custom">Custom</option>
+            <option value="hd">HD — 1280 × 720</option>
+            <option value="fhd">Full HD — 1920 × 1080</option>
+            <option value="qhd">QHD — 2560 × 1440</option>
+            <option value="uhd">4K — 3840 × 2160</option>
+          </select>
+        </label>
+        <div class="size-inputs">
+          <label>Width <input id="custom-width" name="width" type="number" min="320" value="1280" required></label>
+          <span aria-hidden="true">×</span>
+          <label>Height <input id="custom-height" name="height" type="number" min="320" value="900" required></label>
+        </div>
+        <button class="add-custom-button" type="submit">Add</button>
+      </form>
+    </section>
+    <script src="phosphor-icons.js"></script>
+    <script src="studio.js"></script>
+  </body>
+</html>
