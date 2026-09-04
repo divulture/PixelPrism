@@ -1,0 +1,1577 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="PixelPrism">
+<title>{{PIXELPRISM_REVIEW_TITLE}}</title>
+<style>
+:root {
+  --ink: #18181b;
+  --text: #27272a;
+  --muted: #71717a;
+  --faint: #a1a1aa;
+  --line: #e4e4e7;
+  --soft: #fafafa;
+  --hover: #f4f4f5;
+  --stage: #ececef;
+  --accent: #ef4444;
+  --accent-ink: #b91c1c;
+  --accent-soft: #fef2f2;
+  --done: #16a34a;
+  --focus: #5367d9;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; overflow: hidden; background: #fff; color: var(--ink); font: 600 12px/1.35 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+[hidden] { display: none !important; }
+
+.app { display: grid; grid-template-rows: 56px minmax(0, 1fr); height: 100vh; }
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.brand-logo { display: grid; place-items: center; flex: none; width: 28px; height: 28px; overflow: hidden; border: 1px solid var(--line); border-radius: 6px; background: var(--soft); color: var(--muted); font-size: 13px; font-weight: 800; }
+.brand-logo img { width: 20px; height: 20px; object-fit: contain; }
+.brand-text { min-width: 0; }
+.brand-text strong { display: block; overflow: hidden; font-size: 13px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.brand-text span { display: block; overflow: hidden; color: var(--muted); font-size: 11px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.progress { display: flex; align-items: center; gap: 10px; flex: none; color: var(--muted); font-size: 11px; font-weight: 600; }
+.progress-bar { width: 120px; height: 4px; overflow: hidden; border-radius: 999px; background: var(--hover); }
+.progress-bar i { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--done); transition: width 200ms ease; }
+.topbar-actions { display: flex; align-items: center; gap: 16px; flex: none; }
+.save-file { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid var(--ink); border-radius: 6px; background: var(--ink); color: #fff; font-size: 11px; font-weight: 700; }
+.save-file:hover:not(:disabled) { background: #3f3f46; }
+.save-file i { width: 6px; height: 6px; border-radius: 999px; background: #fca5a5; }
+.save-file:disabled { border-color: transparent; background: transparent; color: var(--muted); cursor: default; }
+.save-file:disabled i { display: none; }
+
+.layout { display: grid; grid-template-columns: 248px minmax(0, 1fr) 320px; min-height: 0; }
+.panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; background: #fff; }
+.pages-panel { border-right: 1px solid var(--line); }
+.comments-panel { border-left: 1px solid var(--line); }
+.panel-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 12px; }
+.panel-header > div { min-width: 0; }
+.panel-count { flex: none; padding-top: 1px; color: var(--muted); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.panel-count.is-complete { color: var(--done); }
+.panel-header h2 { margin: 0; font-size: 12px; font-weight: 800; }
+.panel-header p { margin: 4px 0 0; overflow: hidden; color: var(--muted); font-size: 11px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.panel-body { flex: 1; min-height: 0; overflow: auto; padding: 0 12px 12px; }
+
+.pages-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.page-item { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 24px; padding: 0 6px; border: 0; border-radius: 4px; background: transparent; text-align: left; font: 700 11px/1.2 Inter, sans-serif; }
+.page-item:hover, .page-item[aria-current="true"] { background: var(--hover); }
+.page-item-icon { display: grid; flex: none; place-items: center; color: var(--faint); }
+.page-item-icon svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
+.page-item:hover .page-item-icon, .page-item[aria-current="true"] .page-item-icon { color: var(--ink); }
+.page-item-name { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--text); text-overflow: ellipsis; white-space: nowrap; }
+.page-item-count { flex: none; color: var(--muted); font-size: 10px; font-weight: 400; font-variant-numeric: tabular-nums; }
+.page-item.is-complete .page-item-count { color: var(--done); }
+/* A page captured at several sizes opens into one row per size. */
+.page-item-toggle { display: grid; flex: none; place-items: center; width: 12px; height: 16px; margin-right: -4px; color: var(--faint); }
+.page-item-toggle svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; transition: transform 120ms ease; }
+.page-item[aria-expanded="true"] .page-item-toggle svg { transform: rotate(90deg); }
+.page-item-toggle:hover { color: var(--ink); }
+.page-children { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin: 8px 0 0; padding: 0; list-style: none; }
+/* A size's icon lines up with its page's name. */
+.page-item.is-viewport { padding-left: 45px; }
+
+.stage-wrap { position: relative; display: grid; grid-template-rows: 44px minmax(0, 1fr); min-width: 0; min-height: 0; background: var(--stage); }
+.place-hint { position: absolute; top: 56px; left: 50%; z-index: 5; display: flex; align-items: center; gap: 10px; max-width: calc(100% - 24px); padding: 6px 6px 6px 12px; border-radius: 6px; background: var(--ink); color: #fff; box-shadow: 0 6px 20px rgba(24, 24, 27, .25); font-size: 11px; font-weight: 600; transform: translateX(-50%); }
+.place-hint button { height: 24px; padding: 0 8px; border: 0; border-radius: 4px; background: rgba(255, 255, 255, .14); color: #fff; font-size: 11px; font-weight: 700; }
+.place-hint button:hover { background: rgba(255, 255, 255, .24); }
+.stage.is-placing .canvas, .stage.is-placing .marker { cursor: crosshair; }
+.toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px; padding: 0 12px; border-bottom: 1px solid var(--line); background: #fff; }
+.stage-title { grid-column: 1; display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.stage-title a { overflow: hidden; color: var(--ink); font-size: 12px; font-weight: 700; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
+.stage-title a:hover { text-decoration: underline; }
+.stage-title span { flex: none; color: var(--muted); font-size: 11px; font-weight: 500; }
+.toolbar-end { grid-column: 3; justify-self: end; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.shot-tools { display: flex; align-items: center; gap: 2px; flex: none; padding: 2px; border: 1px solid var(--line); border-radius: 6px; }
+.shot-tools button { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border: 0; border-radius: 4px; background: transparent; color: var(--text); font-size: 11px; font-weight: 700; white-space: nowrap; }
+.shot-tools button:hover { background: var(--hover); }
+.shot-tools button.icon-only { width: 26px; padding: 0; justify-content: center; }
+.shot-tools svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.stage-wrap.is-drop-target::after { content: "Drop an image to replace this screenshot"; position: absolute; inset: 52px 8px 8px; z-index: 4; display: grid; place-items: center; border: 2px dashed var(--focus); border-radius: 8px; background: rgba(83, 103, 217, .08); color: var(--focus); font-size: 12px; font-weight: 700; pointer-events: none; }
+.stage-wrap.is-drop-target.is-empty-drop::after { content: "Drop an image to add a screenshot"; }
+.notice { position: absolute; bottom: 16px; left: 50%; z-index: 5; display: flex; align-items: center; gap: 10px; max-width: calc(100% - 24px); padding: 6px 6px 6px 12px; border-radius: 6px; background: var(--ink); color: #fff; box-shadow: 0 6px 20px rgba(24, 24, 27, .25); font-size: 11px; font-weight: 600; transform: translateX(-50%); }
+.notice.is-error { background: var(--accent-ink); }
+.notice.is-plain { padding-right: 12px; }
+.notice button { height: 24px; padding: 0 8px; border: 0; border-radius: 4px; background: rgba(255, 255, 255, .14); color: #fff; font-size: 11px; font-weight: 700; }
+.notice button:hover { background: rgba(255, 255, 255, .24); }
+.stage-empty button { margin-top: 12px; height: 28px; padding: 0 12px; border: 1px solid var(--ink); border-radius: 6px; background: var(--ink); color: #fff; font-size: 11px; font-weight: 700; }
+.stage-empty button:hover { background: #3f3f46; }
+.zoom { display: flex; align-items: center; gap: 2px; flex: none; padding: 2px; border: 1px solid var(--line); border-radius: 6px; }
+.zoom button { display: grid; place-items: center; min-width: 26px; height: 24px; padding: 0 6px; border: 0; border-radius: 4px; background: transparent; color: var(--text); font-size: 11px; font-weight: 700; }
+.zoom button:hover { background: var(--hover); }
+.zoom button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+.zoom svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.zoom-value { min-width: 48px !important; font-variant-numeric: tabular-nums; }
+.shots-nav { grid-column: 2; display: flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 6px; }
+.shots-nav button { display: grid; place-items: center; width: 26px; height: 24px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--text); }
+.shots-nav button:hover:not(:disabled) { background: var(--hover); }
+.shots-nav button:disabled { color: var(--faint); cursor: default; }
+.shots-nav svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.shots-nav span { min-width: 64px; color: var(--text); font-size: 11px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
+.zoom-divider { width: 1px; height: 16px; margin: 0 2px; background: var(--line); }
+
+.stage { position: relative; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.stage.is-dragging { cursor: grabbing; user-select: none; }
+.canvas { position: relative; margin: 24px auto; overflow: hidden; background: #fff; box-shadow: 0 0 0 1px rgba(24, 24, 27, .08), 0 8px 28px rgba(24, 24, 27, .12); }
+.canvas img { display: block; width: 100%; height: 100%; user-select: none; -webkit-user-drag: none; }
+.overlay { position: absolute; inset: 0; }
+.highlight { position: absolute; border: 2px solid var(--accent); border-radius: 3px; background: rgba(239, 68, 68, .06); box-shadow: 0 0 0 9999px rgba(24, 24, 27, .32); pointer-events: none; transition: left 160ms ease, top 160ms ease, width 160ms ease, height 160ms ease; }
+.marker { position: absolute; z-index: 1; display: grid; place-items: center; width: 22px; height: 22px; margin: -11px 0 0 -11px; padding: 0; border: 2px solid #fff; border-radius: 50%; background: var(--accent); color: #fff; box-shadow: 0 1px 4px rgba(24, 24, 27, .3); font-size: 11px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; transform: translateX(var(--offset, 0px)) scale(var(--scale, 1)); transition: transform 120ms ease, opacity 120ms ease, background 120ms ease; }
+.marker:hover { --scale: 1.12; }
+.marker.is-done { background: var(--faint); }
+.overlay.has-selection .marker { opacity: .4; }
+.overlay.has-selection .marker.is-selected { z-index: 2; opacity: 1; --scale: 1.18; animation: marker-select-pulse 1.6s ease-in-out infinite; }
+@keyframes marker-select-pulse { 0%, 100% { box-shadow: 0 0 0 4px rgba(239, 68, 68, .28), 0 2px 8px rgba(24, 24, 27, .35); } 50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, .12), 0 2px 8px rgba(24, 24, 27, .35); } }
+.stage-empty { display: grid; place-items: center; height: 100%; padding: 24px; color: var(--muted); font-size: 12px; font-weight: 500; text-align: center; }
+.stage-empty strong { display: block; margin-bottom: 4px; color: var(--ink); font-weight: 700; }
+
+.vp-group + .vp-group { margin-top: 12px; }
+.vp-header { display: flex; align-items: center; gap: 8px; min-width: 0; width: 100%; min-height: 24px; margin: 0 0 4px; padding: 0 6px; border: 0; border-radius: 4px; background: transparent; color: var(--text); text-align: left; font: 700 11px/1.2 Inter, sans-serif; }
+.vp-header:hover, .vp-group.is-active .vp-header { background: var(--hover); }
+.vp-size { min-width: 0; overflow: hidden; color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.vp-count { margin-left: auto; color: var(--muted); font-size: 10px; font-weight: 400; font-variant-numeric: tabular-nums; }
+.comments-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.comment-item { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; min-width: 0; padding: 4px 8px; border-radius: 4px; background: #fff; cursor: pointer; transition: background 120ms ease; }
+.comment-item:hover { background: var(--hover); }
+.comment-item.is-selected { background: var(--hover); }
+.comment-item p { display: -webkit-box; margin: 0; overflow: hidden; overflow-wrap: anywhere; color: var(--text); font-size: 12px; font-weight: 500; line-height: 18px; white-space: pre-wrap; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+.comment-item.is-text-expanded p { display: block; overflow: visible; -webkit-line-clamp: unset; }
+.comment-item p { cursor: text; user-select: text; }
+.comment-link { color: var(--focus); text-decoration: underline; text-decoration-color: rgba(83, 103, 217, .4); text-underline-offset: 2px; cursor: pointer; }
+.comment-link:hover { text-decoration-color: currentColor; }
+.comment-item.is-done .comment-link { color: var(--faint); text-decoration: line-through; }
+.comment-item p code { padding: 0 3px; border-radius: 3px; background: rgba(24, 24, 27, .06); font: 600 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.comment-kind { display: block; margin-bottom: 2px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; }
+.comment-meta { display: flex; align-items: center; gap: 4px; min-height: 18px; color: var(--muted); font: 400 11px/1.2 Inter, sans-serif; }
+.comment-number { flex: none; margin-inline-end: 2px; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.comment-item.is-selected .comment-number { color: var(--accent); }
+.comment-target { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.comment-state { flex: none; color: var(--muted); white-space: nowrap; }
+.comment-item.is-done .comment-number { color: var(--faint); }
+.comment-item.is-done p, .comment-item.is-done .comment-target, .comment-item.is-done .comment-state, .comment-item.is-done .comment-kind { color: var(--faint); text-decoration: line-through; }
+.comment-item.is-done p code { background: transparent; }
+.comment-controls { display: flex; flex: none; align-items: center; gap: 2px; margin: -3px 0 -3px auto; }
+.comment-check { flex: none; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--muted); }
+.comment-more { flex: none; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--muted); }
+.comment-more-wrap { position: relative; display: flex; }
+.comment-more svg { width: 18px; height: 18px; fill: currentColor; }
+.comment-more:hover, .comment-more[aria-expanded="true"] { background: rgba(24, 24, 27, .06); color: var(--ink); }
+/* Checkbox and menu stay out of the way until the card is hovered or selected. */
+.comment-check, .comment-more { opacity: 0; transition: opacity 120ms ease, background 120ms ease; }
+.comment-item:hover :is(.comment-check, .comment-more), .comment-item.is-selected :is(.comment-check, .comment-more), .comment-more[aria-expanded="true"], :is(.comment-check, .comment-more):focus-visible { opacity: 1; }
+.comment-menu { position: absolute; z-index: 3; top: calc(100% + 6px); right: 0; display: grid; min-width: 110px; padding: 4px; border: 1px solid var(--line); border-radius: 6px; background: #fff; box-shadow: 0 8px 18px rgba(24, 24, 27, .14); cursor: default; }
+.comment-menu.is-up { top: auto; bottom: calc(100% + 6px); }
+.comment-menu button { display: flex; align-items: center; min-height: 28px; padding: 0 8px; border: 0; border-radius: 4px; background: transparent; color: #3f3f46; font: 650 11px/1 Inter, sans-serif; text-align: left; white-space: nowrap; }
+.comment-menu button:hover, .comment-menu button:focus-visible { background: var(--hover); color: var(--ink); }
+.comment-menu button.is-danger { color: var(--accent-ink); }
+.comment-menu button.is-danger:hover, .comment-menu button.is-danger:focus-visible { background: #fee2e2; color: #991b1b; }
+.comment-check:hover { background: rgba(24, 24, 27, .06); color: var(--ink); }
+.comment-check i { display: grid; place-items: center; width: 16px; height: 16px; border: 1.5px solid #a1a1aa; border-radius: 4px; background: #fff; }
+.comment-check svg { width: 12px; height: 12px; fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; opacity: 0; }
+.comment-check[aria-checked="true"] i { border-color: var(--done); background: var(--done); }
+.comment-check[aria-checked="true"] svg { opacity: 1; }
+.comment-attachments { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 0; }
+.comment-attachment { display: block; width: 56px; height: 56px; padding: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 6px; background: var(--soft); cursor: zoom-in; transition: border-color 120ms ease, box-shadow 120ms ease; }
+.comment-attachment:hover { border-color: #a1a1aa; box-shadow: 0 2px 6px rgba(24, 24, 27, .12); }
+.comment-attachment img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.comment-item.is-done .comment-attachment { opacity: .5; }
+.lightbox { position: fixed; inset: 0; width: 100%; max-width: none; height: 100%; max-height: none; margin: 0; padding: 0; border: 0; background: rgba(24, 24, 27, .94); color: #fff; }
+.lightbox::backdrop { background: transparent; }
+.lightbox[open] { display: grid; grid-template-rows: 48px minmax(0, 1fr); }
+.lightbox-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 8px 0 16px; }
+.lightbox-bar p { margin: 0; overflow: hidden; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.lightbox button { display: grid; place-items: center; flex: none; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: #fff; }
+.lightbox button:hover { background: rgba(255, 255, 255, .14); }
+.lightbox svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.lightbox-stage { display: grid; grid-template-columns: 48px minmax(0, 1fr) 48px; align-items: center; justify-items: center; min-height: 0; padding: 0 8px 24px; }
+#lightbox-prev { grid-column: 1; }
+#lightbox-next { grid-column: 3; }
+.lightbox-stage img { grid-column: 2; grid-row: 1; max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 4px; background: #fff; box-shadow: 0 12px 40px rgba(0, 0, 0, .4); }
+.empty-note { margin: 4px 0 0; color: var(--muted); font-size: 11px; font-weight: 500; }
+.footer-note { padding: 10px 12px; border-top: 1px solid var(--line); color: var(--faint); font-size: 10px; font-weight: 600; }
+
+@media (max-width: 1100px) {
+  .layout { grid-template-columns: 200px minmax(0, 1fr) 280px; }
+  .progress-bar { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-logo" id="brand-logo"></div>
+      <div class="brand-text"><strong id="brand-name"></strong><span id="brand-meta"></span></div>
+    </div>
+    <div class="topbar-actions">
+      <div class="progress" aria-live="polite"><span id="progress-label"></span><div class="progress-bar"><i id="progress-fill"></i></div></div>
+      <button type="button" class="save-file" id="save-file" hidden><i aria-hidden="true"></i><span></span></button>
+    </div>
+  </header>
+  <div class="layout">
+    <aside class="panel pages-panel" aria-labelledby="pages-title">
+      <header class="panel-header"><div><h2 id="pages-title">Pages</h2><p id="pages-meta"></p></div></header>
+      <nav class="panel-body"><ol class="pages-list" id="pages-list"></ol></nav>
+    </aside>
+    <main class="stage-wrap">
+      <div class="toolbar">
+        <div class="stage-title"><a id="stage-link" target="_blank" rel="noopener noreferrer"></a><span id="stage-meta"></span></div>
+        <div class="shots-nav" id="shots-nav" role="group" aria-label="Screens">
+          <button type="button" id="shot-prev" aria-label="Previous screen" title="Previous screen ([)"><svg viewBox="0 0 16 16"><path d="M10 3.5L5.5 8l4.5 4.5"/></svg></button>
+          <span id="shot-label"></span>
+          <button type="button" id="shot-next" aria-label="Next screen" title="Next screen (])"><svg viewBox="0 0 16 16"><path d="M6 3.5L10.5 8 6 12.5"/></svg></button>
+        </div>
+        <div class="toolbar-end">
+        <div class="shot-tools" role="group" aria-label="Screenshot">
+          <button type="button" id="shot-replace" title="Replace this screenshot with an image file. You can also paste an image (⌘V) or drop one on the screenshot."><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2.5 11l3.5-3.5 3 3 2-2 2.5 2.5"/><circle cx="10.5" cy="6" r="1"/></svg><span>Replace</span></button>
+          <button type="button" class="icon-only" id="shot-restore" aria-label="Restore the original screenshot" title="Restore the original screenshot" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4v3.5h3.5"/><path d="M3.4 7.2A5 5 0 1 1 4.5 11.5"/></svg></button>
+        </div>
+        <input type="file" id="shot-file" accept="image/*" hidden>
+        <div class="zoom" role="group" aria-label="Zoom">
+          <button type="button" id="zoom-out" aria-label="Zoom out" title="Zoom out (−)"><svg viewBox="0 0 16 16"><path d="M3.5 8h9"/></svg></button>
+          <button type="button" class="zoom-value" id="zoom-value" title="Reset to 100% (1)">100%</button>
+          <button type="button" id="zoom-in" aria-label="Zoom in" title="Zoom in (+)"><svg viewBox="0 0 16 16"><path d="M3.5 8h9M8 3.5v9"/></svg></button>
+          <span class="zoom-divider"></span>
+          <button type="button" id="zoom-fit" aria-pressed="true" title="Fit to screen (0)">Fit</button>
+          <button type="button" id="zoom-actual" aria-pressed="false" title="Actual size (1)">100%</button>
+        </div>
+        </div>
+      </div>
+      <div class="notice" id="notice" role="status" hidden><span id="notice-text"></span><button type="button" id="notice-action" hidden></button></div>
+      <div class="place-hint" id="place-hint" role="status" hidden><span id="place-hint-text"></span><button type="button" id="place-cancel">Cancel</button></div>
+      <div class="stage" id="stage" tabindex="-1">
+        <div class="canvas" id="canvas" hidden><img id="screenshot" alt=""><div class="overlay" id="overlay"></div></div>
+        <div class="stage-empty" id="stage-empty" hidden></div>
+      </div>
+    </main>
+    <aside class="panel comments-panel" aria-labelledby="comments-title">
+      <header class="panel-header"><div><h2 id="comments-title">Comments</h2></div><span class="panel-count" id="comments-count" title="Resolved comments"></span></header>
+      <div class="panel-body" id="comments-groups"></div>
+      <div class="footer-note" id="footer-note">Powered by PixelPrism</div>
+    </aside>
+  </div>
+</div>
+<dialog class="lightbox" id="lightbox" aria-labelledby="lightbox-caption">
+  <header class="lightbox-bar">
+    <p id="lightbox-caption"></p>
+    <button type="button" id="lightbox-close" aria-label="Close preview" title="Close (Esc)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+  </header>
+  <div class="lightbox-stage" id="lightbox-stage">
+    <button type="button" id="lightbox-prev" aria-label="Previous image" title="Previous image (←)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3.5L5.5 8l4.5 4.5"/></svg></button>
+    <img id="lightbox-image" alt="">
+    <button type="button" id="lightbox-next" aria-label="Next image" title="Next image (→)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5L10.5 8 6 12.5"/></svg></button>
+  </div>
+</dialog>
+<script type="application/json" id="pixelprism-review-data">{{PIXELPRISM_REVIEW_DATA}}</script>
+<script>
+(() => {
+  // Captured before rendering touches the DOM; saving writes this markup
+  // back into the same file with the updated data.
+  const PRISTINE_HTML = `<!doctype html>\n${document.documentElement.outerHTML}`;
+  const data = JSON.parse(document.getElementById('pixelprism-review-data').textContent);
+  const $ = (selector) => document.querySelector(selector);
+  const ZOOM_STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4];
+  const STORAGE_KEY = `pixelprism-review:${data.id}`;
+  const PINS_KEY = `pixelprism-review-pins:${data.id}`;
+  const DELETED_KEY = `pixelprism-review-deleted:${data.id}`;
+  const CHECK_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg>';
+  const DOTS_ICON = '<svg viewBox="0 0 256 256" aria-hidden="true"><path d="M140,128a12,12,0,1,1-12-12A12,12,0,0,1,140,128Zm56-12a12,12,0,1,0,12,12A12,12,0,0,0,196,116ZM60,116a12,12,0,1,0,12,12A12,12,0,0,0,60,116Z"/></svg>';
+
+  // scope: null shows every size of the page; a viewport index shows only that size.
+  const state = { page: 0, viewport: 0, scope: null, open: new Set([0]), shot: 0, selected: null, expanded: null, menu: null, placing: null, zoom: 1, fit: true, done: new Set(), unsaved: false };
+  // Checkmarks and points not yet written into the file live in
+  // localStorage; once the file is saved, the file is the source of truth.
+  const resolvedKey = (ids) => JSON.stringify([...ids].sort());
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const stored = raw === null ? data.resolved : JSON.parse(raw);
+    if (Array.isArray(stored)) stored.forEach((id) => state.done.add(id));
+    if (raw !== null && resolvedKey(state.done) !== resolvedKey(data.resolved || [])) state.unsaved = true;
+  } catch { /* Storage can be unavailable for file:// pages; checkmarks then last for the session. */ }
+
+  const saveDone = () => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify([...state.done])); } catch { /* See above. */ }
+  };
+  // Points placed by hand, by entry id: { shot, x, y } in screenshot pixels,
+  // or null for a point that was removed. Kept until they are written into
+  // the file, so closing the tab never loses work.
+  let pinDraft = {};
+  try {
+    const stored = JSON.parse(localStorage.getItem(PINS_KEY) || '{}');
+    if (stored && typeof stored === 'object' && !Array.isArray(stored)) pinDraft = stored;
+  } catch { /* See above. */ }
+  const savePinDraft = () => {
+    try { localStorage.setItem(PINS_KEY, JSON.stringify(pinDraft)); } catch { /* See above. */ }
+  };
+  const el = (tag, className, text) => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  };
+  // Same breakpoints and glyphs PixelPrism's studio uses for its viewport icons.
+  const DEVICE_ICONS = {
+    phone: '<rect width="14" height="20" x="5" y="2" rx="2" ry="2"></rect><path d="M12 18h.01"></path>',
+    'phone-wide': '<g transform="rotate(90 12 12)"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"></rect><path d="M12 18h.01"></path></g>',
+    tablet: '<rect width="16" height="20" x="4" y="2" rx="2" ry="2"></rect><path d="M12 18h.01"></path>',
+    laptop: '<path d="M20 16V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v10"></path><path d="M2 16h20"></path><path d="M6 20h12"></path>',
+    desktop: '<rect width="20" height="14" x="2" y="3" rx="2"></rect><path d="M8 21h8"></path><path d="M12 17v4"></path>'
+  };
+  function deviceGlyph(width) {
+    if (width <= 450) return 'phone';
+    if (width <= 620) return 'phone-wide';
+    if (width <= 900) return 'tablet';
+    if (width <= 1200) return 'laptop';
+    return 'desktop';
+  }
+  function deviceIconSvg(width) {
+    return `<svg viewBox="0 0 24 24" aria-hidden="true">${DEVICE_ICONS[deviceGlyph(width)]}</svg>`;
+  }
+  const pageEntries = (page) => page.viewports.flatMap((viewport) => viewport.entries);
+  const currentPage = () => data.pages[state.page];
+  const currentViewport = () => currentPage().viewports[state.viewport];
+  const findEntry = (id) => {
+    for (const [pageIndex, page] of data.pages.entries()) {
+      for (const [viewportIndex, viewport] of page.viewports.entries()) {
+        const entry = viewport.entries.find((candidate) => candidate.id === id);
+        if (entry) return { entry, pageIndex, viewportIndex };
+      }
+    }
+    return null;
+  };
+  // A page captured in one of its tabs is named after it: 1440 × 900 · Active.
+  // "iOS devices · iPhone SE · 375 × 667 · Archive": the preset and device
+  // the notes were made in, when the review knows them.
+  const viewportSize = (viewport) => [viewport.device, `${viewport.width} × ${viewport.height}`].filter(Boolean).join(' · ');
+  const viewportLabel = (viewport) => [viewport.workspace, viewportSize(viewport), viewport.state].filter(Boolean).join(' · ');
+  const currentShot = () => currentViewport().shots[state.shot] || null;
+  // The sizes whose comments are listed: all of them, or the one picked.
+  const visibleViewports = () => currentPage().viewports
+    .map((viewport, viewportIndex) => ({ viewport, viewportIndex }))
+    .filter(({ viewportIndex }) => state.scope === null || viewportIndex === state.scope);
+  const visibleEntries = () => visibleViewports().flatMap(({ viewport }) => viewport.entries);
+
+  // Manual points. The automatic placement is kept in entry.auto so a point
+  // can be undone; entry.pin is in page coordinates so the studio can put it
+  // on a fresh screenshot after the review is imported back.
+  const PLACEMENT_FIELDS = ['target', 'shot', 'rect', 'marker'];
+  function applyPin(entry, viewport, shotIndex, x, y) {
+    const shot = viewport.shots[shotIndex];
+    if (!shot) return false;
+    const px = Math.round(Math.min(Math.max(x, 0), shot.width));
+    const py = Math.round(Math.min(Math.max(y, 0), shot.height));
+    if (!entry.auto && !entry.pin) {
+      entry.auto = {};
+      PLACEMENT_FIELDS.forEach((field) => { if (entry[field] !== undefined) entry.auto[field] = entry[field]; });
+    }
+    entry.pin = { x: px, y: Math.round(py + (shot.scrollY || 0)) };
+    entry.target = 'pin';
+    entry.shot = shotIndex;
+    entry.rect = { x: px, y: py, width: 0, height: 0 };
+    entry.marker = { x: px, y: py, offset: 0 };
+    return true;
+  }
+  function removePin(entry) {
+    if (!entry.pin) return false;
+    delete entry.pin;
+    PLACEMENT_FIELDS.forEach((field) => { delete entry[field]; });
+    if (entry.auto) {
+      Object.assign(entry, entry.auto);
+      delete entry.auto;
+    } else {
+      // The point came with the export; without it the comment is unplaced.
+      entry.target = 'missing';
+      entry.shot = 0;
+    }
+    return true;
+  }
+  const placementKey = (entry) => JSON.stringify([entry.target, entry.shot, entry.pin]);
+  Object.entries(pinDraft).forEach(([id, pin]) => {
+    const found = findEntry(id);
+    if (!found) return;
+    const before = placementKey(found.entry);
+    if (pin) applyPin(found.entry, data.pages[found.pageIndex].viewports[found.viewportIndex], pin.shot, pin.x, pin.y);
+    else removePin(found.entry);
+    if (placementKey(found.entry) !== before) state.unsaved = true;
+  });
+  // Comments deleted here but not yet written into the file.
+  let deletedDraft = [];
+  try {
+    const stored = JSON.parse(localStorage.getItem(DELETED_KEY) || '[]');
+    if (Array.isArray(stored)) deletedDraft = stored;
+  } catch { /* See above. */ }
+  const saveDeletedDraft = () => {
+    try { localStorage.setItem(DELETED_KEY, JSON.stringify(deletedDraft)); } catch { /* See above. */ }
+  };
+  function dropEntry(id) {
+    const found = findEntry(id);
+    if (!found) return false;
+    const viewport = data.pages[found.pageIndex].viewports[found.viewportIndex];
+    viewport.entries = viewport.entries.filter((entry) => entry.id !== id);
+    return true;
+  }
+  deletedDraft.forEach((id) => {
+    if (dropEntry(id)) state.unsaved = true;
+    state.done.delete(id);
+  });
+
+  // Header
+  const logo = $('#brand-logo');
+  if (data.site.logo) {
+    const image = el('img');
+    image.src = data.site.logo;
+    image.alt = '';
+    logo.append(image);
+  } else {
+    logo.textContent = (data.site.name || 'W').trim().charAt(0).toUpperCase();
+  }
+  $('#brand-name').textContent = data.site.name || 'Design Review';
+  const created = new Date(data.createdAt);
+  $('#brand-meta').textContent = `Design Review · ${Number.isNaN(created.valueOf()) ? '' : new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(created)}`;
+  $('#pages-meta').textContent = `${data.pages.length} ${data.pages.length === 1 ? 'page' : 'pages'}`;
+
+  function renderProgress() {
+    const all = data.pages.flatMap(pageEntries);
+    const done = all.filter((entry) => state.done.has(entry.id)).length;
+    $('#progress-label').textContent = `${done} of ${all.length} resolved`;
+    $('#progress-fill').style.width = all.length ? `${(done / all.length) * 100}%` : '0';
+  }
+
+  function pageRow(entries, { className, name, title, width, current }) {
+    const done = entries.filter((entry) => state.done.has(entry.id)).length;
+    const button = el('button', className);
+    button.type = 'button';
+    button.title = title;
+    button.setAttribute('aria-current', String(current));
+    button.classList.toggle('is-complete', entries.length > 0 && done === entries.length);
+    const icon = el('span', 'page-item-icon');
+    icon.innerHTML = deviceIconSvg(width);
+    button.append(icon, el('span', 'page-item-name', name), el('span', 'page-item-count', `${done}/${entries.length}`));
+    return button;
+  }
+
+  // A page with one size is a single row. A page with several opens into a
+  // row per size: the page row shows the comments of every size, a size row
+  // only that size's comments.
+  function renderPages() {
+    const hasTree = data.pages.some((page) => page.viewports.length > 1);
+    $('#pages-list').replaceChildren(...data.pages.map((page, index) => {
+      const item = el('li');
+      const isTree = page.viewports.length > 1;
+      const isOpen = isTree && state.open.has(index);
+      const button = pageRow(pageEntries(page), {
+        className: 'page-item',
+        name: page.label,
+        title: page.url,
+        width: page.viewports[0]?.width || 0,
+        current: index === state.page && (state.scope === null || !isTree)
+      });
+      button.dataset.page = String(index);
+      if (hasTree) {
+        const toggle = el('span', 'page-item-toggle');
+        if (isTree) {
+          toggle.dataset.toggle = String(index);
+          toggle.title = isOpen ? 'Hide sizes' : 'Show sizes';
+          toggle.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5L10.5 8 6 12.5"/></svg>';
+          button.setAttribute('aria-expanded', String(isOpen));
+        }
+        button.prepend(toggle);
+      }
+      item.append(button);
+      if (isOpen) {
+        const children = el('ol', 'page-children');
+        children.append(...page.viewports.map((viewport, viewportIndex) => {
+          const child = el('li');
+          const row = pageRow(viewport.entries, {
+            className: 'page-item is-viewport',
+            name: viewportLabel(viewport),
+            title: `${page.url} · ${viewportLabel(viewport)}`,
+            width: viewport.width,
+            current: index === state.page && state.scope === viewportIndex
+          });
+          row.dataset.page = String(index);
+          row.dataset.viewport = String(viewportIndex);
+          child.append(row);
+          return child;
+        }));
+        item.append(children);
+      }
+      return item;
+    }));
+  }
+
+  // Web addresses in a comment become links that open in a new tab.
+  // Punctuation that ends a sentence stays outside the link, as does a
+  // closing bracket the address never opened: "(see https://a.b/c)".
+  const URL_PATTERN = /\b(?:https?:\/\/|www\.)[^\s<>"'«»]+/gi;
+  function trimUrl(url) {
+    let end = url.length;
+    while (end > 0) {
+      const char = url[end - 1];
+      if ('.,;:!?\'"'.includes(char)) { end -= 1; continue; }
+      const pair = { ')': '(', ']': '[', '}': '{' }[char];
+      if (pair) {
+        const head = url.slice(0, end);
+        if (head.split(pair).length < head.split(char).length) { end -= 1; continue; }
+      }
+      break;
+    }
+    return url.slice(0, end);
+  }
+  function appendLinkedText(parent, text) {
+    let last = 0;
+    for (const match of text.matchAll(URL_PATTERN)) {
+      const url = trimUrl(match[0]);
+      if (!url) continue;
+      parent.append(text.slice(last, match.index));
+      const link = el('a', 'comment-link', url);
+      link.href = /^www\./i.test(url) ? `https://${url}` : url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.title = link.href;
+      parent.append(link);
+      last = match.index + url.length;
+    }
+    parent.append(text.slice(last));
+  }
+
+  function entryText(entry, paragraph) {
+    if (entry.kind !== 'change') {
+      appendLinkedText(paragraph, entry.text || '');
+      return;
+    }
+    const property = el('code', '', entry.property);
+    const from = el('code', '', entry.from || 'none');
+    const to = el('code', '', entry.to || 'removed');
+    paragraph.append(property, ': ', from, ' → ', to);
+  }
+
+  function entryTarget(entry) {
+    if (entry.target === 'page') return 'Whole page';
+    if (entry.target === 'pin') return 'Point placed by hand';
+    return entry.selector || 'Element';
+  }
+
+  function entryState(entry) {
+    if (entry.target === 'missing') return 'Not found';
+    if (entry.target === 'hidden') return 'Hidden';
+    return '';
+  }
+
+
+  function renderSave() {
+    const button = $('#save-file');
+    const label = button.querySelector('span');
+    const status = save.status;
+    button.hidden = !state.unsaved && status !== 'saved';
+    button.disabled = status === 'saving' || status === 'saved' || status === 'unsupported';
+    if (status === 'saving') label.textContent = 'Saving...';
+    else if (status === 'saved') label.textContent = 'Saved';
+    else if (status === 'unsupported') label.textContent = 'Kept in this browser';
+    else if (status === 'error') label.textContent = 'Save failed · Retry';
+    else label.textContent = 'Save';
+    button.title = ({
+      unsupported: 'Saving into the file needs Chrome or Edge. Changes stay in this browser.',
+      error: save.error || 'The file could not be written.',
+      saved: 'Changes are saved into this file.'
+    })[status] || `Pick this file (${reviewFileName()}) once. After that, changes are saved into it automatically.`;
+  }
+
+  function renderComments() {
+    const entries = visibleEntries();
+    const done = entries.filter((entry) => state.done.has(entry.id)).length;
+    const count = $('#comments-count');
+    count.textContent = `${done}/${entries.length}`;
+    count.classList.toggle('is-complete', entries.length > 0 && done === entries.length);
+    $('#comments-groups').replaceChildren(...visibleViewports().map(({ viewport, viewportIndex }) => {
+      const group = el('section', 'vp-group');
+      group.classList.toggle('is-active', viewportIndex === state.viewport);
+      const header = el('button', 'vp-header');
+      header.type = 'button';
+      header.dataset.viewport = String(viewportIndex);
+      header.title = viewportLabel(viewport);
+      header.append(
+        el('span', '', `Screenshot ${viewportIndex + 1}`),
+        // The tab, menu or state (Focus) the screenshot shows, after its size.
+        el('span', 'vp-size', [viewportSize(viewport), viewport.state].filter(Boolean).join(' · ')),
+        el('span', 'vp-count', String(viewport.entries.length))
+      );
+      const list = el('ol', 'comments-list');
+      viewport.entries.forEach((entry) => {
+        const isDone = state.done.has(entry.id);
+        const item = el('li', 'comment-item');
+        item.dataset.entry = entry.id;
+        item.classList.toggle('is-page', entry.target === 'page');
+        item.classList.toggle('is-missing', entry.target === 'missing' || entry.target === 'hidden');
+        item.classList.toggle('is-done', isDone);
+        item.classList.toggle('is-selected', entry.id === state.selected);
+        item.classList.toggle('is-text-expanded', entry.id === state.expanded);
+        item.tabIndex = 0;
+        // An edit to a state says which: "CSS change · Focus".
+        if (entry.kind === 'change') item.append(el('span', 'comment-kind', entry.state ? `CSS change · ${entry.state}` : 'CSS change'));
+        if (entry.kind === 'change' || entry.text) {
+          const paragraph = el('p');
+          entryText(entry, paragraph);
+          item.append(paragraph);
+        }
+        // Images attached in the studio: open to view, never removed here.
+        const images = Array.isArray(entry.attachments) ? entry.attachments.filter((image) => image?.src) : [];
+        if (images.length) {
+          const tiles = el('div', 'comment-attachments');
+          images.forEach((image, index) => {
+            const tile = el('button', 'comment-attachment');
+            tile.type = 'button';
+            tile.dataset.image = String(index);
+            tile.dataset.entry = entry.id;
+            tile.title = image.name || 'Image';
+            tile.setAttribute('aria-label', `Open ${image.name || 'image'}`);
+            const img = el('img');
+            img.src = image.src;
+            img.alt = '';
+            img.loading = 'lazy';
+            img.draggable = false;
+            tile.append(img);
+            tiles.append(tile);
+          });
+          item.append(tiles);
+        }
+        const meta = el('div', 'comment-meta');
+        const number = el('span', 'comment-number', String(entry.number));
+        const target = el('span', 'comment-target', entryTarget(entry));
+        target.title = entryTarget(entry);
+        const stateText = entryState(entry);
+        const check = el('button', 'comment-check');
+        check.type = 'button';
+        check.dataset.check = entry.id;
+        check.setAttribute('role', 'checkbox');
+        check.setAttribute('aria-checked', String(isDone));
+        check.setAttribute('aria-label', `Mark comment ${entry.number} as ${isDone ? 'not done' : 'done'}`);
+        check.title = isDone ? 'Mark as not done' : 'Mark as done';
+        const box = el('i');
+        box.innerHTML = CHECK_ICON;
+        check.append(box);
+        meta.append(number, target);
+        if (stateText) meta.append(el('span', 'comment-state', `· ${stateText}`));
+        const controls = el('div', 'comment-controls');
+        {
+          const menuOpen = state.menu === entry.id;
+          const more = el('button', 'comment-more');
+          more.type = 'button';
+          more.dataset.action = 'menu';
+          more.dataset.entry = entry.id;
+          more.title = 'Actions';
+          more.setAttribute('aria-label', `Actions for comment ${entry.number}`);
+          more.setAttribute('aria-haspopup', 'menu');
+          more.setAttribute('aria-expanded', String(menuOpen));
+          more.innerHTML = DOTS_ICON;
+          const menu = el('div', 'comment-menu');
+          menu.setAttribute('role', 'menu');
+          menu.hidden = !menuOpen;
+          const menuItem = (action, label, className) => {
+            const button = el('button', className, label);
+            button.type = 'button';
+            button.setAttribute('role', 'menuitem');
+            button.dataset.action = action;
+            button.dataset.entry = entry.id;
+            menu.append(button);
+          };
+          // Moving needs a screenshot to click on; deleting works everywhere.
+          if (viewport.shots.length) {
+            const placing = state.placing === entry.id;
+            menuItem(placing ? 'cancel' : 'place', placing ? 'Cancel reattaching' : 'Reattach comment');
+            if (entry.pin && entry.auto && !placing) menuItem('reset', 'Undo reattach');
+          }
+          menuItem('delete', 'Delete comment', 'is-danger');
+          // The menu opens under its own button, left of the checkbox.
+          const moreWrap = el('div', 'comment-more-wrap');
+          moreWrap.append(more, menu);
+          controls.append(moreWrap);
+        }
+        // The checkbox is the main action, so it stays at the far right.
+        controls.append(check);
+        meta.append(controls);
+        item.append(meta);
+        list.append(item);
+      });
+      // With one size picked in the pages list, its name there is the header.
+      if (state.scope === null) group.append(header);
+      if (viewport.entries.length || state.scope === null) group.append(list);
+      else group.append(el('p', 'empty-note', 'No comments at this size.'));
+      return group;
+    }));
+    // Near the bottom of the panel the menu opens upwards to stay visible.
+    const openMenu = document.querySelector('.comment-menu:not([hidden])');
+    if (openMenu) {
+      const panelBottom = $('#comments-groups').getBoundingClientRect().bottom;
+      openMenu.classList.toggle('is-up', openMenu.getBoundingClientRect().bottom > panelBottom);
+    }
+  }
+
+  // Stage
+  const stage = $('#stage');
+  const canvas = $('#canvas');
+  const screenshot = $('#screenshot');
+  const overlay = $('#overlay');
+  const stageEmpty = $('#stage-empty');
+  const STAGE_PADDING = 24;
+
+  function fitZoom() {
+    const shot = currentShot();
+    if (!shot) return 1;
+    const availableWidth = Math.max(80, stage.clientWidth - (STAGE_PADDING * 2));
+    const availableHeight = Math.max(80, stage.clientHeight - (STAGE_PADDING * 2));
+    return Math.min(1, availableWidth / shot.width, availableHeight / shot.height);
+  }
+
+  function applyZoom(zoom, anchor) {
+    const shot = currentShot();
+    if (!shot) return;
+    const next = Math.min(4, Math.max(0.1, zoom));
+    const previous = state.zoom;
+    const rect = stage.getBoundingClientRect();
+    const anchorX = anchor ? anchor.x - rect.left : stage.clientWidth / 2;
+    const anchorY = anchor ? anchor.y - rect.top : stage.clientHeight / 2;
+    const contentX = (stage.scrollLeft + anchorX - canvas.offsetLeft) / previous;
+    const contentY = (stage.scrollTop + anchorY - canvas.offsetTop) / previous;
+    state.zoom = next;
+    canvas.style.width = `${Math.round(shot.width * next)}px`;
+    canvas.style.height = `${Math.round(shot.height * next)}px`;
+    stage.scrollLeft = (contentX * next) + canvas.offsetLeft - anchorX;
+    stage.scrollTop = (contentY * next) + canvas.offsetTop - anchorY;
+    $('#zoom-value').textContent = `${Math.round(next * 100)}%`;
+    $('#zoom-fit').setAttribute('aria-pressed', String(state.fit));
+    $('#zoom-actual').setAttribute('aria-pressed', String(!state.fit && Math.abs(next - 1) < 0.001));
+  }
+
+  function setFit() {
+    state.fit = true;
+    applyZoom(fitZoom());
+  }
+
+  function stepZoom(direction, anchor) {
+    state.fit = false;
+    const current = state.zoom;
+    const next = direction > 0
+      ? ZOOM_STEPS.find((step) => step > current + 0.001) ?? ZOOM_STEPS[ZOOM_STEPS.length - 1]
+      : [...ZOOM_STEPS].reverse().find((step) => step < current - 0.001) ?? ZOOM_STEPS[0];
+    applyZoom(next, anchor);
+  }
+
+  const percent = (value, total) => `${(value / total) * 100}%`;
+
+  function renderOverlay() {
+    const viewport = currentViewport();
+    const shot = currentShot();
+    overlay.replaceChildren();
+    overlay.classList.toggle('has-selection', Boolean(state.selected));
+    if (!shot) return;
+    const onShot = viewport.entries.filter((entry) => entry.shot === state.shot);
+    const selected = onShot.find((entry) => entry.id === state.selected);
+    if (selected?.rect?.width && selected.rect.height) {
+      const highlight = el('div', 'highlight');
+      highlight.style.left = percent(selected.rect.x, shot.width);
+      highlight.style.top = percent(selected.rect.y, shot.height);
+      highlight.style.width = percent(selected.rect.width, shot.width);
+      highlight.style.height = percent(selected.rect.height, shot.height);
+      overlay.append(highlight);
+    }
+    onShot.forEach((entry) => {
+      if (!entry.marker) return;
+      const marker = el('button', 'marker', String(entry.number));
+      marker.type = 'button';
+      marker.dataset.entry = entry.id;
+      marker.setAttribute('aria-label', `Comment ${entry.number}`);
+      marker.classList.toggle('is-done', state.done.has(entry.id));
+      marker.classList.toggle('is-selected', entry.id === state.selected);
+      marker.style.left = percent(entry.marker.x, shot.width);
+      marker.style.top = percent(entry.marker.y, shot.height);
+      if (entry.marker.offset) marker.style.setProperty('--offset', `${entry.marker.offset * 24}px`);
+      overlay.append(marker);
+    });
+  }
+
+  function renderStage() {
+    const page = currentPage();
+    const viewport = currentViewport();
+    const link = $('#stage-link');
+    link.textContent = page.label;
+    link.href = page.url;
+    link.title = page.url;
+    $('#stage-meta').textContent = [viewportLabel(viewport), viewport.warning].filter(Boolean).join(' · ');
+    const shot = currentShot();
+    const shotCount = viewport.shots.length;
+    $('#shots-nav').hidden = shotCount < 2;
+    $('#shot-label').textContent = `Screen ${state.shot + 1}/${shotCount}`;
+    $('#shot-prev').disabled = state.shot <= 0;
+    $('#shot-next').disabled = state.shot >= shotCount - 1;
+    canvas.hidden = !shot;
+    stageEmpty.hidden = Boolean(shot);
+    document.querySelectorAll('.zoom button').forEach((button) => { button.disabled = !shot; });
+    $('#shot-replace span').textContent = shot ? 'Replace' : 'Add';
+    $('#shot-restore').hidden = !shot?.original;
+    if (!shot) {
+      const strong = el('strong', '', 'Screenshot unavailable');
+      const add = el('button', '', 'Add screenshot');
+      add.type = 'button';
+      add.dataset.action = 'add-shot';
+      stageEmpty.replaceChildren(el('div'));
+      stageEmpty.firstChild.append(strong, viewport.error || 'Chrome did not return an image for this viewport.', el('br'), add);
+      return;
+    }
+    if (screenshot.getAttribute('src') !== shot.src) screenshot.src = shot.src;
+    state.fit = true;
+    state.zoom = fitZoom();
+    canvas.style.width = `${Math.round(shot.width * state.zoom)}px`;
+    canvas.style.height = `${Math.round(shot.height * state.zoom)}px`;
+    stage.scrollTo(0, 0);
+    applyZoom(state.zoom);
+    renderOverlay();
+  }
+
+  function render() {
+    renderSave();
+    renderProgress();
+    renderPages();
+    renderComments();
+  }
+
+  function scrollEntryIntoStage(entry) {
+    const shot = currentShot();
+    if (!shot || !entry.rect) return;
+    const zoom = state.zoom;
+    const centerX = canvas.offsetLeft + ((entry.rect.x + (entry.rect.width / 2)) * zoom);
+    const top = canvas.offsetTop + (entry.rect.y * zoom);
+    const height = entry.rect.height * zoom;
+    const targetTop = height > stage.clientHeight - 80 ? top - 40 : top + (height / 2) - (stage.clientHeight / 2);
+    stage.scrollTo({ left: centerX - (stage.clientWidth / 2), top: targetTop, behavior: 'smooth' });
+  }
+
+  function scrollEntryIntoPanel(id) {
+    const item = document.querySelector(`.comment-item[data-entry="${CSS.escape(id)}"]`);
+    item?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+
+  function stopPlacing() {
+    if (!state.placing) return;
+    state.placing = null;
+    stage.classList.remove('is-placing');
+    $('#place-hint').hidden = true;
+  }
+
+  function startPlacing(id) {
+    const found = findEntry(id);
+    if (!found) return;
+    const viewport = data.pages[found.pageIndex].viewports[found.viewportIndex];
+    if (!viewport.shots.length) return;
+    if (state.selected !== id) selectEntry(id);
+    state.placing = id;
+    stage.classList.add('is-placing');
+    const screens = viewport.shots.length > 1 ? ' Use [ and ] to switch screens.' : '';
+    $('#place-hint-text').textContent = `Click where comment ${found.entry.number} belongs.${screens}`;
+    $('#place-hint').hidden = false;
+    renderComments();
+    stage.focus({ preventScroll: true });
+  }
+
+  function cancelPlacing() {
+    if (!state.placing) return;
+    stopPlacing();
+    renderComments();
+  }
+
+  function placeAt(event) {
+    const found = findEntry(state.placing);
+    const shot = currentShot();
+    if (!found || !shot) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / state.zoom;
+    const y = (event.clientY - rect.top) / state.zoom;
+    const id = state.placing;
+    stopPlacing();
+    if (!applyPin(found.entry, currentViewport(), state.shot, x, y)) return;
+    pinDraft[id] = { shot: state.shot, x: found.entry.marker.x, y: found.entry.marker.y };
+    savePinDraft();
+    markChanged();
+    state.selected = id;
+    render();
+    renderOverlay();
+  }
+
+  function resetPlacement(id) {
+    const found = findEntry(id);
+    if (!found || !removePin(found.entry)) return;
+    pinDraft[id] = null;
+    savePinDraft();
+    markChanged();
+    stopPlacing();
+    const shotCount = currentViewport().shots.length;
+    state.shot = Math.min(found.entry.shot || 0, Math.max(0, shotCount - 1));
+    render();
+    renderStage();
+  }
+
+  function deleteEntry(id) {
+    if (!dropEntry(id)) return;
+    if (state.placing === id) stopPlacing();
+    if (state.selected === id) state.selected = null;
+    if (state.expanded === id) state.expanded = null;
+    state.menu = null;
+    state.done.delete(id);
+    saveDone();
+    delete pinDraft[id];
+    savePinDraft();
+    deletedDraft.push(id);
+    saveDeletedDraft();
+    markChanged();
+    render();
+    renderOverlay();
+  }
+
+  function reviewFileName() {
+    try {
+      return decodeURIComponent(location.pathname.split('/').pop() || '') || 'the review file';
+    } catch {
+      return 'the review file';
+    }
+  }
+
+  function reviewHtml() {
+    const snapshot = { ...data, resolved: [...state.done] };
+    // Keep the embedded JSON from closing its <script> element early.
+    const json = JSON.stringify(snapshot)
+      .replace(/</g, '\\u003c')
+      .replace(/\u2028/g, '\\u2028')
+      .replace(/\u2029/g, '\\u2029');
+    return PRISTINE_HTML.replace(
+      /(<script type="application\/json" id="pixelprism-review-data">)[\s\S]*?(<\/script>)/,
+      (match, open, close) => open + json + close
+    );
+  }
+
+  // A page cannot write to its own file on its own: the viewer asks for this
+  // file once through the file picker, then keeps the handle (IndexedDB) and
+  // writes every change into it.
+  const save = { status: 'idle', error: '', version: 0, handle: null, running: false, again: false, timer: null, hideTimer: null };
+  const canSaveToFile = typeof window.showOpenFilePicker === 'function';
+
+  // Screenshots replaced but not yet written into the file wait in their own
+  // database: images are too large for localStorage, and older review files
+  // open the handles database at its first version.
+  function handleStore(mode, action, database = 'pixelprism-review-files', storeName = 'handles') {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(database, 1);
+      request.onupgradeneeded = () => request.result.createObjectStore(storeName);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const db = request.result;
+        const transaction = db.transaction(storeName, mode);
+        const operation = action(transaction.objectStore(storeName));
+        transaction.oncomplete = () => { db.close(); resolve(operation.result); };
+        transaction.onerror = () => { db.close(); reject(transaction.error); };
+      };
+    });
+  }
+
+  function reviewIdOf(html) {
+    const parsed = new DOMParser().parseFromString(html, 'text/html');
+    try {
+      return JSON.parse(parsed.getElementById('pixelprism-review-data')?.textContent || '{}').id;
+    } catch {
+      return undefined;
+    }
+  }
+
+  async function writableHandle(interactive) {
+    if (!save.handle) save.handle = await handleStore('readonly', (store) => store.get(data.id)).catch(() => null);
+    if (save.handle) {
+      if (await save.handle.queryPermission({ mode: 'readwrite' }) === 'granted') return save.handle;
+      if (!interactive) return null;
+      return await save.handle.requestPermission({ mode: 'readwrite' }) === 'granted' ? save.handle : null;
+    }
+    if (!interactive) return null;
+    const [picked] = await window.showOpenFilePicker({
+      id: 'pixelprism-review',
+      startIn: 'downloads',
+      types: [{ description: 'Design review', accept: { 'text/html': ['.html', '.htm'] } }]
+    });
+    if (reviewIdOf(await (await picked.getFile()).text()) !== data.id) {
+      throw new Error(`That is a different review. Pick ${reviewFileName()}, the file open in this tab.`);
+    }
+    save.handle = picked;
+    handleStore('readwrite', (store) => store.put(picked, data.id)).catch(() => {});
+    // The picker may use up the click; the next click then asks for access.
+    const permission = await picked.requestPermission({ mode: 'readwrite' }).catch(() => 'prompt');
+    return permission === 'granted' ? picked : null;
+  }
+
+  async function saveToFile(interactive) {
+    if (!state.unsaved) return;
+    if (!canSaveToFile) {
+      save.status = 'unsupported';
+      renderSave();
+      return;
+    }
+    if (save.running) {
+      save.again = true;
+      return;
+    }
+    save.running = true;
+    const version = save.version;
+    clearTimeout(save.hideTimer);
+    save.status = 'saving';
+    renderSave();
+    try {
+      const handle = await writableHandle(interactive);
+      if (!handle) {
+        save.status = 'idle';
+        return;
+      }
+      const writable = await handle.createWritable();
+      await writable.write(reviewHtml());
+      await writable.close();
+      if (version === save.version) {
+        state.unsaved = false;
+        pinDraft = {};
+        deletedDraft = [];
+        shotDraft = {};
+        shotStore('readwrite', (store) => store.delete(data.id)).catch(() => {});
+        try {
+          localStorage.removeItem(PINS_KEY);
+          localStorage.removeItem(DELETED_KEY);
+          localStorage.removeItem(STORAGE_KEY);
+        } catch { /* Nothing to clean up. */ }
+      }
+      save.status = 'saved';
+      save.hideTimer = setTimeout(() => {
+        if (save.status === 'saved') save.status = 'idle';
+        renderSave();
+      }, 1800);
+    } catch (error) {
+      save.status = error?.name === 'AbortError' ? 'idle' : 'error';
+      save.error = error?.message || '';
+    } finally {
+      save.running = false;
+      renderSave();
+      if (save.again || (state.unsaved && save.status === 'saved')) {
+        save.again = false;
+        saveToFile(false);
+      }
+    }
+  }
+
+  function markChanged() {
+    state.unsaved = true;
+    save.version += 1;
+    if (save.status === 'saved') save.status = 'idle';
+    renderSave();
+    clearTimeout(save.timer);
+    save.timer = setTimeout(() => saveToFile(false), 400);
+  }
+
+  // Replacing screenshots. Drafts are kept per screen, as "page:viewport:shot".
+  let shotDraft = {};
+  const shotStore = (mode, action) => handleStore(mode, action, 'pixelprism-review-drafts', 'shots');
+  const saveShotDraft = () => {
+    shotStore('readwrite', (store) => store.put(shotDraft, data.id)).catch(() => { /* Kept for this session. */ });
+  };
+
+  const notice = { timer: null, action: null };
+  function showNotice(text, { action, label, error } = {}) {
+    clearTimeout(notice.timer);
+    const box = $('#notice');
+    $('#notice-text').textContent = text;
+    const button = $('#notice-action');
+    button.hidden = !action;
+    button.textContent = label || '';
+    notice.action = action || null;
+    box.classList.toggle('is-error', Boolean(error));
+    box.classList.toggle('is-plain', !action);
+    box.hidden = false;
+    notice.timer = setTimeout(hideNotice, action ? 6000 : 4000);
+  }
+  function hideNotice() {
+    clearTimeout(notice.timer);
+    $('#notice').hidden = true;
+    notice.action = null;
+  }
+
+  // Images come in as they are and go into the file as JPEG, like the
+  // screenshots PixelPrism captures, so a large PNG does not swell the file.
+  async function imageToShot(file) {
+    const url = URL.createObjectURL(file);
+    try {
+      const image = new Image();
+      image.src = url;
+      await image.decode();
+      const width = image.naturalWidth;
+      const height = image.naturalHeight;
+      if (!width || !height) throw new Error('empty');
+      const drawing = document.createElement('canvas');
+      drawing.width = width;
+      drawing.height = height;
+      const context = drawing.getContext('2d');
+      // JPEG has no transparency; transparent areas become white, not black.
+      context.fillStyle = '#fff';
+      context.fillRect(0, 0, width, height);
+      context.drawImage(image, 0, 0);
+      const src = drawing.toDataURL('image/jpeg', 0.9);
+      if (!src.startsWith('data:image/jpeg')) throw new Error('encode');
+      return { src, width, height };
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  // Replacing a screenshot is a last resort for a capture that went wrong:
+  // only the image changes. Comments and their points stay as they are.
+  function commitShot(next, target) {
+    const viewport = data.pages[target.page]?.viewports[target.viewport];
+    if (!viewport) return;
+    viewport.shots[target.shot] = next;
+    shotDraft[`${target.page}:${target.viewport}:${target.shot}`] = next;
+    saveShotDraft();
+    markChanged();
+    stopPlacing();
+    const moved = target.page !== state.page || target.viewport !== state.viewport;
+    if (target.page !== state.page) state.scope = null;
+    else if (state.scope !== null) state.scope = target.viewport;
+    Object.assign(state, { page: target.page, viewport: target.viewport, shot: target.shot });
+    if (moved) state.selected = null;
+    render();
+    renderStage();
+  }
+
+  async function replaceShot(file) {
+    if (!file || !file.type.startsWith('image/')) {
+      showNotice('Pick an image file: PNG, JPEG or WebP.', { error: true });
+      return;
+    }
+    const viewport = currentViewport();
+    const target = { page: state.page, viewport: state.viewport, shot: viewport.shots.length ? state.shot : 0 };
+    const previous = viewport.shots[target.shot] || null;
+    let image;
+    try {
+      image = await imageToShot(file);
+    } catch {
+      showNotice('This image could not be read.', { error: true });
+      return;
+    }
+    const next = previous
+      ? {
+        ...previous,
+        ...image,
+        // The captured image is kept once, however often the screen is replaced.
+        ...(previous.added ? {} : { original: previous.original || { src: previous.src, width: previous.width, height: previous.height } })
+      }
+      : { ...image, scrollY: 0, added: true };
+    commitShot(next, target);
+    showNotice(previous ? 'Screenshot replaced.' : 'Screenshot added.', previous ? {
+      label: 'Undo',
+      action: () => commitShot(previous, target)
+    } : {});
+  }
+
+  function restoreShot() {
+    const shot = currentShot();
+    if (!shot?.original) return;
+    const next = { ...shot, ...shot.original };
+    delete next.original;
+    commitShot(next, { page: state.page, viewport: state.viewport, shot: state.shot });
+    showNotice('Original screenshot restored.');
+  }
+
+  function pickShotFile() {
+    const input = $('#shot-file');
+    input.value = '';
+    input.click();
+  }
+
+  // scope is null for the whole page, or the index of one of its sizes.
+  function selectPage(index, scope = null) {
+    if (scope === null && data.pages[index].viewports.length > 1) state.open.add(index);
+    if (index === state.page && scope === state.scope) {
+      renderPages();
+      return;
+    }
+    stopPlacing();
+    // Going back to the whole page keeps the size on screen.
+    const viewport = scope ?? (index === state.page ? state.viewport : 0);
+    const stageChanged = index !== state.page || viewport !== state.viewport;
+    state.page = index;
+    state.scope = scope;
+    state.viewport = viewport;
+    if (stageChanged) {
+      state.shot = 0;
+      state.selected = null;
+      state.expanded = null;
+    }
+    state.menu = null;
+    render();
+    if (stageChanged) renderStage();
+    $('#comments-groups').scrollTop = 0;
+  }
+
+  function togglePageOpen(index, open = !state.open.has(index)) {
+    if (open) state.open.add(index);
+    else state.open.delete(index);
+    renderPages();
+  }
+
+  function selectViewport(index) {
+    if (index === state.viewport) return;
+    stopPlacing();
+    state.viewport = index;
+    state.shot = 0;
+    state.selected = null;
+    state.expanded = null;
+    state.menu = null;
+    renderComments();
+    renderStage();
+  }
+
+  function selectEntry(id, { fromMarker = false } = {}) {
+    const found = findEntry(id);
+    if (!found) return;
+    if (state.placing && state.placing !== id) stopPlacing();
+    const pageChanged = found.pageIndex !== state.page;
+    const viewportChanged = pageChanged || found.viewportIndex !== state.viewport || found.entry.shot !== state.shot;
+    // A comment from another size switches the filter to that size.
+    const scope = pageChanged ? null : state.scope === null ? null : found.viewportIndex;
+    const scopeChanged = pageChanged || scope !== state.scope;
+    state.page = found.pageIndex;
+    state.scope = scope;
+    state.viewport = found.viewportIndex;
+    state.shot = found.entry.shot || 0;
+    state.selected = state.selected === id && fromMarker ? null : id;
+    if (scopeChanged) renderPages();
+    renderComments();
+    if (viewportChanged) renderStage();
+    else renderOverlay();
+    if (!state.selected) return;
+    scrollEntryIntoPanel(id);
+    if (!fromMarker) scrollEntryIntoStage(found.entry);
+  }
+
+  // Clicking a card selects it and expands its text past the three-line
+  // clamp; opening one collapses whichever other one was open.
+  function toggleEntryExpanded(id) {
+    state.expanded = state.expanded === id ? null : id;
+    selectEntry(id);
+  }
+
+  function selectShot(index) {
+    const count = currentViewport().shots.length;
+    if (index < 0 || index >= count || index === state.shot) return;
+    state.shot = index;
+    const selected = currentViewport().entries.find((entry) => entry.id === state.selected);
+    // While placing, the comment stays selected on every screen.
+    if (selected && selected.shot !== index && !state.placing) state.selected = null;
+    renderComments();
+    renderStage();
+  }
+
+  function clearSelection() {
+    if (!state.selected) return;
+    stopPlacing();
+    state.selected = null;
+    renderComments();
+    renderOverlay();
+  }
+
+  function toggleDone(id) {
+    if (state.done.has(id)) state.done.delete(id);
+    else state.done.add(id);
+    saveDone();
+    markChanged();
+    render();
+    renderOverlay();
+  }
+
+  function moveSelection(direction) {
+    const entries = visibleEntries();
+    if (!entries.length) return;
+    const index = entries.findIndex((entry) => entry.id === state.selected);
+    const next = index < 0 ? (direction > 0 ? 0 : entries.length - 1) : Math.min(entries.length - 1, Math.max(0, index + direction));
+    selectEntry(entries[next].id);
+  }
+
+  // Events
+  $('#pages-list').addEventListener('click', (event) => {
+    const toggle = event.target.closest('[data-toggle]');
+    if (toggle) {
+      togglePageOpen(Number(toggle.dataset.toggle));
+      return;
+    }
+    const button = event.target.closest('[data-page]');
+    if (!button) return;
+    const { page, viewport } = button.dataset;
+    selectPage(Number(page), viewport === undefined ? null : Number(viewport));
+  });
+  // Right and Left open and close a page's sizes, as in a file tree.
+  $('#pages-list').addEventListener('keydown', (event) => {
+    const button = event.target.closest('[aria-expanded]');
+    if (!button || (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    togglePageOpen(Number(button.dataset.page), event.key === 'ArrowRight');
+    $(`#pages-list .page-item[data-page="${button.dataset.page}"]:not([data-viewport])`)?.focus();
+  });
+
+  // Full-size preview of a comment's images.
+  const lightbox = $('#lightbox');
+  const lightboxView = { images: [], index: 0 };
+  function showLightboxImage(index) {
+    const { images } = lightboxView;
+    lightboxView.index = (index + images.length) % images.length;
+    const image = images[lightboxView.index];
+    $('#lightbox-image').src = image.src;
+    $('#lightbox-image').alt = image.name || 'Image';
+    const size = image.width && image.height ? ` · ${image.width} × ${image.height}` : '';
+    const position = images.length > 1 ? ` · ${lightboxView.index + 1} / ${images.length}` : '';
+    $('#lightbox-caption').textContent = `${image.name || 'Image'}${size}${position}`;
+    $('#lightbox-prev').hidden = $('#lightbox-next').hidden = images.length < 2;
+  }
+  function openLightbox(id, index) {
+    const images = (findEntry(id)?.entry.attachments || []).filter((image) => image?.src);
+    if (!images[index]) return;
+    lightboxView.images = images;
+    showLightboxImage(index);
+    if (!lightbox.open) lightbox.showModal();
+  }
+  $('#lightbox-prev').addEventListener('click', () => showLightboxImage(lightboxView.index - 1));
+  $('#lightbox-next').addEventListener('click', () => showLightboxImage(lightboxView.index + 1));
+  $('#lightbox-close').addEventListener('click', () => lightbox.close());
+  lightbox.addEventListener('click', (event) => {
+    if (event.target === lightbox || event.target.id === 'lightbox-stage') lightbox.close();
+  });
+  lightbox.addEventListener('keydown', (event) => {
+    // Review shortcuts (zoom, screens, selection) stay out of the preview;
+    // Escape still closes the dialog.
+    event.stopPropagation();
+    if (event.key === 'ArrowLeft' && lightboxView.images.length > 1) showLightboxImage(lightboxView.index - 1);
+    else if (event.key === 'ArrowRight' && lightboxView.images.length > 1) showLightboxImage(lightboxView.index + 1);
+  });
+  lightbox.addEventListener('close', () => { $('#lightbox-image').removeAttribute('src'); });
+
+  function closeMenu() {
+    if (!state.menu) return;
+    state.menu = null;
+    renderComments();
+  }
+  // A click outside the comments list (stage, pages) closes an open menu.
+  document.addEventListener('click', (event) => {
+    // The path is taken before the list re-renders, so a click that just
+    // opened the menu is still recognised as inside the list.
+    if (state.menu && !event.composedPath().includes($('#comments-groups'))) closeMenu();
+  });
+
+  $('#comments-groups').addEventListener('click', (event) => {
+    const action = event.target.closest('[data-action]');
+    if (action) {
+      const { entry } = action.dataset;
+      if (action.dataset.action === 'menu') {
+        state.menu = state.menu === entry ? null : entry;
+        renderComments();
+        return;
+      }
+      state.menu = null;
+      if (action.dataset.action === 'place') startPlacing(entry);
+      else if (action.dataset.action === 'cancel') cancelPlacing();
+      else if (action.dataset.action === 'reset') resetPlacement(entry);
+      else if (action.dataset.action === 'delete') deleteEntry(entry);
+      renderComments();
+      return;
+    }
+    // Any other click inside the list closes an open menu first.
+    if (state.menu) {
+      state.menu = null;
+      renderComments();
+      return;
+    }
+    const check = event.target.closest('[data-check]');
+    if (check) {
+      toggleDone(check.dataset.check);
+      return;
+    }
+    const tile = event.target.closest('[data-image]');
+    if (tile) {
+      openLightbox(tile.dataset.entry, Number(tile.dataset.image));
+      return;
+    }
+    const header = event.target.closest('[data-viewport]');
+    if (header) {
+      selectViewport(Number(header.dataset.viewport));
+      return;
+    }
+    // A link opens on its own and leaves the card as it is.
+    if (event.target.closest('a[href]')) return;
+    const item = event.target.closest('.comment-item');
+    if (!item) return;
+    // Selecting text to copy it is not a click on the card: re-rendering the
+    // list would drop the selection. The same goes for double and triple
+    // clicks, which select a word or a paragraph.
+    const selection = window.getSelection();
+    if (event.detail > 1 || (selection && !selection.isCollapsed && item.contains(selection.anchorNode))) return;
+    toggleEntryExpanded(item.dataset.entry);
+  });
+
+  $('#comments-groups').addEventListener('keydown', (event) => {
+    const item = event.target.closest('.comment-item');
+    if (!item || event.target !== item) return;
+    if (event.key === 'Enter') { event.preventDefault(); toggleEntryExpanded(item.dataset.entry); }
+    if (event.key === ' ') { event.preventDefault(); toggleDone(item.dataset.entry); }
+  });
+
+  overlay.addEventListener('click', (event) => {
+    // While placing, a click on a marker is a click on the screenshot.
+    if (state.placing) return;
+    const marker = event.target.closest('.marker');
+    if (marker) {
+      event.stopPropagation();
+      selectEntry(marker.dataset.entry, { fromMarker: true });
+    }
+  });
+
+  let drag = null;
+  let dragMoved = false;
+  stage.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0 || (event.target.closest('.marker') && !state.placing)) return;
+    drag = { x: event.clientX, y: event.clientY, left: stage.scrollLeft, top: stage.scrollTop };
+    dragMoved = false;
+  });
+  window.addEventListener('pointermove', (event) => {
+    if (!drag) return;
+    const dx = event.clientX - drag.x;
+    const dy = event.clientY - drag.y;
+    if (!dragMoved && Math.hypot(dx, dy) < 4) return;
+    dragMoved = true;
+    stage.classList.add('is-dragging');
+    stage.scrollLeft = drag.left - dx;
+    stage.scrollTop = drag.top - dy;
+  });
+  window.addEventListener('pointerup', () => {
+    drag = null;
+    stage.classList.remove('is-dragging');
+  });
+  stage.addEventListener('click', (event) => {
+    if (dragMoved) return;
+    if (state.placing) {
+      if (event.target.closest('#canvas')) placeAt(event);
+      return;
+    }
+    if (event.target.closest('.marker')) return;
+    clearSelection();
+  });
+
+  stage.addEventListener('wheel', (event) => {
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    state.fit = false;
+    const factor = Math.exp(-event.deltaY * (event.deltaMode === 1 ? 0.05 : 0.0025));
+    applyZoom(Math.min(4, Math.max(0.25, state.zoom * factor)), { x: event.clientX, y: event.clientY });
+  }, { passive: false });
+
+  $('#shot-replace').addEventListener('click', pickShotFile);
+  $('#shot-restore').addEventListener('click', restoreShot);
+  $('#shot-file').addEventListener('change', (event) => replaceShot(event.target.files?.[0]));
+  stageEmpty.addEventListener('click', (event) => {
+    if (event.target.closest('[data-action="add-shot"]')) pickShotFile();
+  });
+  $('#notice-action').addEventListener('click', () => {
+    const action = notice.action;
+    hideNotice();
+    action?.();
+  });
+  // An image pasted anywhere in the review replaces the screen on display.
+  document.addEventListener('paste', (event) => {
+    if (lightbox.open || event.target.closest?.('input, textarea, [contenteditable="true"]')) return;
+    const item = [...(event.clipboardData?.items || [])].find((candidate) => candidate.kind === 'file' && candidate.type.startsWith('image/'));
+    if (!item) return;
+    event.preventDefault();
+    replaceShot(item.getAsFile());
+  });
+  // A file dropped outside the stage would make the browser leave the review.
+  const hasFiles = (event) => [...(event.dataTransfer?.types || [])].includes('Files');
+  document.addEventListener('dragover', (event) => { if (hasFiles(event)) event.preventDefault(); });
+  document.addEventListener('drop', (event) => { if (hasFiles(event)) event.preventDefault(); });
+  stage.addEventListener('dragover', (event) => {
+    if (!hasFiles(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    stage.parentElement.classList.add('is-drop-target');
+    stage.parentElement.classList.toggle('is-empty-drop', !currentShot());
+  });
+  stage.addEventListener('dragleave', (event) => {
+    if (!stage.contains(event.relatedTarget)) stage.parentElement.classList.remove('is-drop-target');
+  });
+  stage.addEventListener('drop', (event) => {
+    stage.parentElement.classList.remove('is-drop-target');
+    if (!hasFiles(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    replaceShot([...event.dataTransfer.files].find((file) => file.type.startsWith('image/')) || event.dataTransfer.files[0]);
+  });
+
+  $('#place-cancel').addEventListener('click', cancelPlacing);
+  $('#save-file').addEventListener('click', () => saveToFile(true));
+  $('#shot-prev').addEventListener('click', () => selectShot(state.shot - 1));
+  $('#shot-next').addEventListener('click', () => selectShot(state.shot + 1));
+  $('#zoom-in').addEventListener('click', () => stepZoom(1));
+  $('#zoom-out').addEventListener('click', () => stepZoom(-1));
+  $('#zoom-fit').addEventListener('click', setFit);
+  const actualSize = () => { state.fit = false; applyZoom(1); };
+  $('#zoom-actual').addEventListener('click', actualSize);
+  $('#zoom-value').addEventListener('click', actualSize);
+
+  document.addEventListener('keydown', (event) => {
+    if (event.target.closest('input, textarea, [contenteditable="true"]')) return;
+    const modifier = event.ctrlKey || event.metaKey;
+    if (event.key === '+' || event.key === '=') { event.preventDefault(); stepZoom(1); }
+    else if (event.key === '-' || event.key === '_') { event.preventDefault(); stepZoom(-1); }
+    else if (event.key === '0' && !event.altKey) { event.preventDefault(); setFit(); }
+    else if (event.key === '1' && !modifier) actualSize();
+    else if (event.key === 'Escape') { if (state.menu) closeMenu(); else if (state.placing) cancelPlacing(); else clearSelection(); }
+    else if (event.key === '[') selectShot(state.shot - 1);
+    else if (event.key === ']') selectShot(state.shot + 1);
+    else if (!modifier && (event.key === 'ArrowDown' || event.key === 'j')) { event.preventDefault(); moveSelection(1); }
+    else if (!modifier && (event.key === 'ArrowUp' || event.key === 'k')) { event.preventDefault(); moveSelection(-1); }
+  });
+
+  new ResizeObserver(() => { if (state.fit) applyZoom(fitZoom()); }).observe(stage);
+
+  render();
+  renderStage();
+  // Work left from an earlier visit goes into the file as soon as access allows.
+  if (state.unsaved) saveToFile(false);
+  // Screenshots replaced on an earlier visit and not yet in the file.
+  shotStore('readonly', (store) => store.get(data.id)).then((stored) => {
+    if (!stored || typeof stored !== 'object') return;
+    let changed = false;
+    Object.entries(stored).forEach(([key, shot]) => {
+      const [pageIndex, viewportIndex, shotIndex] = key.split(':').map(Number);
+      const viewport = data.pages[pageIndex]?.viewports[viewportIndex];
+      if (!viewport || !shot?.src || shotIndex > viewport.shots.length) return;
+      shotDraft[key] = shot;
+      if (viewport.shots[shotIndex]?.src === shot.src) return;
+      viewport.shots[shotIndex] = shot;
+      changed = true;
+    });
+    if (!changed) return;
+    state.unsaved = true;
+    render();
+    renderStage();
+    saveToFile(false);
+  }).catch(() => { /* No drafts to bring back. */ });
+})();
+</script>
+</body>
+</html>
