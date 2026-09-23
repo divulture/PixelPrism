@@ -27,6 +27,8 @@ const customHeight = document.querySelector('#custom-height');
 const customTrigger = document.querySelector('#custom-trigger');
 const changeReportButton = document.querySelector('#change-report-button');
 const copyCodexButton = document.querySelector('#copy-codex-button');
+const reviewExportButton = document.querySelector('#review-export-button');
+const reviewPdfExportButton = document.querySelector('#review-pdf-export-button');
 const handoffFab = document.querySelector('#handoff-fab');
 const handoffFabToggle = document.querySelector('#handoff-fab-toggle');
 const handoffFabMenu = document.querySelector('#handoff-fab-menu');
@@ -704,7 +706,7 @@ async function copyForCodex() {
   const payload = JSON.stringify(codexHandoff(), null, 2);
   try {
     await navigator.clipboard.writeText(payload);
-    notify('Codex handoff copied to the clipboard.', 'success');
+    notify('Review copied to the clipboard.', 'success');
   } catch {
     const area = document.createElement('textarea');
     area.value = payload;
@@ -714,8 +716,8 @@ async function copyForCodex() {
     area.select();
     const copied = document.execCommand('copy');
     area.remove();
-    if (copied) notify('Codex handoff copied to the clipboard.', 'success');
-    else notify('Unable to copy the Codex handoff.', 'error');
+    if (copied) notify('Review copied to the clipboard.', 'success');
+    else notify('Unable to copy the review.', 'error');
   }
 }
 
@@ -743,6 +745,801 @@ async function downloadChangeReport() {
     notify(`Changes report was not saved: ${error.message}`, 'error');
   } finally {
     changeReportButton.disabled = false;
+  }
+}
+
+function reviewElementKey(element, selector = '') {
+  if (!element) return 'page';
+  return element.domPath || (element.id ? `#${element.id}` : '') || element.selector || selector || 'element';
+}
+
+function reviewItems() {
+  const groups = new Map();
+  const getGroup = ({ url, route, viewport, element, selector }) => {
+    const canonicalUrl = canonicalInspectorUrl(url || targetUrl);
+    const safeViewport = {
+      width: Math.round(Number(viewport?.width) || 0),
+      height: Math.round(Number(viewport?.height) || 0)
+    };
+    const key = [canonicalUrl, safeViewport.width, safeViewport.height, reviewElementKey(element, selector)].join('\u0000');
+    if (!groups.has(key)) {
+      groups.set(key, {
+        url: canonicalUrl,
+        route: route || '/',
+        viewport: safeViewport,
+        element: element || null,
+        selector: element?.selector || selector || '',
+        comments: [],
+        changes: []
+      });
+    }
+    return groups.get(key);
+  };
+
+  changeLog.forEach((change) => getGroup(change).changes.push(change));
+  comments.forEach((comment) => getGroup(comment).comments.push(comment.comment));
+
+  return [...groups.values()].sort((left, right) => (
+    left.url.localeCompare(right.url)
+    || left.viewport.width - right.viewport.width
+    || left.viewport.height - right.viewport.height
+    || reviewElementKey(left.element, left.selector).localeCompare(reviewElementKey(right.element, right.selector))
+  ));
+}
+
+function reviewChangesForContext(item) {
+  return [...changeLog.values()].filter((change) => (
+    canonicalInspectorUrl(change.url) === item.url
+    && change.viewport.width === item.viewport.width
+    && change.viewport.height === item.viewport.height
+  ));
+}
+
+function reviewCaptureContexts(items) {
+  const contexts = new Map();
+  items.forEach((item, index) => {
+    const key = [item.url, item.viewport.width, item.viewport.height].join('\u0000');
+    if (!contexts.has(key)) {
+      contexts.set(key, {
+        url: item.url,
+        viewport: item.viewport,
+        changes: reviewChangesForContext(item),
+        targets: []
+      });
+    }
+    contexts.get(key).targets.push({
+      id: index,
+      marker: index + 1,
+      target: item.element ? { element: item.element, selector: item.selector } : null
+    });
+  });
+  return [...contexts.values()];
+}
+
+function promiseWithTimeout(promise, timeout, message) {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error(message)), timeout);
+    Promise.resolve(promise).then(
+      (value) => { window.clearTimeout(timer); resolve(value); },
+      (error) => { window.clearTimeout(timer); reject(error); }
+    );
+  });
+}
+
+function reviewFilename() {
+  const now = new Date();
+  const part = (value) => String(value).padStart(2, '0');
+  return `pixelprism-review-${now.getFullYear()}-${part(now.getMonth() + 1)}-${part(now.getDate())}-${part(now.getHours())}${part(now.getMinutes())}.pdf`;
+}
+
+function loadReviewImage(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('A review screenshot could not be decoded.'));
+    image.src = dataUrl;
+  });
+}
+
+function wrappedCanvasLines(context, value, maxWidth) {
+  const paragraphs = String(value ?? '').split(/\r?\n/);
+  const lines = [];
+  paragraphs.forEach((paragraph, paragraphIndex) => {
+    if (!paragraph) {
+      lines.push('');
+      return;
+    }
+    const words = paragraph.split(/\s+/);
+    let line = '';
+    words.forEach((word) => {
+      const candidate = line ? `${line} ${word}` : word;
+      if (context.measureText(candidate).width <= maxWidth) {
+        line = candidate;
+        return;
+      }
+      if (line) lines.push(line);
+      if (context.measureText(word).width <= maxWidth) {
+        line = word;
+        return;
+      }
+      let fragment = '';
+      [...word].forEach((character) => {
+        if (fragment && context.measureText(fragment + character).width > maxWidth) {
+          lines.push(fragment);
+          fragment = character;
+        } else fragment += character;
+      });
+      line = fragment;
+    });
+    if (line) lines.push(line);
+    if (paragraphIndex < paragraphs.length - 1 && paragraph) lines.push('');
+  });
+  return lines;
+}
+
+function drawReviewLines(context, lines, x, y, lineHeight, color = '#27272a') {
+  context.fillStyle = color;
+  lines.forEach((line, index) => context.fillText(line, x, y + (index * lineHeight)));
+  return y + (lines.length * lineHeight);
+}
+
+function reviewPageLabel(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === 'file:') return decodeURIComponent(parsed.pathname.split('/').pop() || parsed.pathname);
+    return `${parsed.hostname}${parsed.pathname === '/' ? '' : parsed.pathname}`;
+  } catch {
+    return url;
+  }
+}
+
+function readableProperty(property) {
+  return String(property || '')
+    .replace(/-/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/^./, (character) => character.toUpperCase());
+}
+
+function describeReviewChange(change) {
+  const from = String(change.from || '').trim();
+  const to = String(change.to || '').trim();
+  if (!from) return `${readableProperty(change.property)}: set to ${to || 'empty'}`;
+  if (!to) return `${readableProperty(change.property)}: removed (was ${from})`;
+  return `${readableProperty(change.property)}: ${from} -> ${to}`;
+}
+
+const REVIEW_PAGE = { width: 1240, height: 1754, margin: 80 };
+
+function createReviewCanvas() {
+  const canvas = document.createElement('canvas');
+  canvas.width = REVIEW_PAGE.width;
+  canvas.height = REVIEW_PAGE.height;
+  const context = canvas.getContext('2d', { alpha: false });
+  context.fillStyle = '#f7f7f8';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.textBaseline = 'top';
+  return { canvas, context };
+}
+
+function reviewSiteName(item) {
+  const provided = String(item?.siteIdentity?.name || '').trim();
+  if (provided) return provided;
+  try {
+    return new URL(item?.url || '').hostname.replace(/^www\./, '') || 'Website';
+  } catch {
+    return 'Website';
+  }
+}
+
+function ellipsizeCanvasText(context, value, maxWidth) {
+  const text = String(value || '');
+  if (context.measureText(text).width <= maxWidth) return text;
+  let shortened = text;
+  while (shortened && context.measureText(`${shortened}...`).width > maxWidth) shortened = shortened.slice(0, -1);
+  return shortened ? `${shortened}...` : '';
+}
+
+function drawReviewDocumentMark(context, item) {
+  const logo = item?.reviewLogoImage;
+  let textX = REVIEW_PAGE.margin;
+  if (logo?.naturalWidth && logo?.naturalHeight) {
+    const frameSize = 42;
+    const scale = Math.min(frameSize / logo.naturalWidth, frameSize / logo.naturalHeight);
+    const width = Math.max(1, Math.round(logo.naturalWidth * scale));
+    const height = Math.max(1, Math.round(logo.naturalHeight * scale));
+    context.drawImage(logo, REVIEW_PAGE.margin + ((frameSize - width) / 2), 72 + ((frameSize - height) / 2), width, height);
+    textX += 58;
+  }
+  context.fillStyle = '#52525b';
+  context.font = '600 18px Inter, sans-serif';
+  context.fillText(ellipsizeCanvasText(context, reviewSiteName(item), 520), textX, 83);
+}
+
+function drawReviewCover(items) {
+  const { canvas, context } = createReviewCanvas();
+  canvas.reviewUrl = items[0]?.url || '';
+  drawReviewDocumentMark(context, items[0]);
+  context.fillStyle = '#18181b';
+  context.font = '800 82px Inter, sans-serif';
+  context.fillText('Design Review', REVIEW_PAGE.margin, 282);
+  context.fillStyle = '#52525b';
+  context.font = '500 28px Inter, sans-serif';
+  context.fillText('A visual handoff of comments and design changes', REVIEW_PAGE.margin, 390);
+
+  const pages = new Set(items.map((item) => item.url));
+  const viewports = new Set(items.map((item) => `${item.url}\u0000${item.viewport.width}x${item.viewport.height}`));
+  const commentCount = items.reduce((count, item) => count + item.comments.length, 0);
+  const changeCount = items.reduce((count, item) => count + item.changes.length, 0);
+  const metrics = [
+    ['Review items', items.length],
+    ['Pages', pages.size],
+    ['Viewports', viewports.size],
+    ['Comments', commentCount],
+    ['Visual changes', changeCount]
+  ];
+  let metricY = 560;
+  metrics.forEach(([label, value]) => {
+    context.fillStyle = '#e4e4e7';
+    context.fillRect(REVIEW_PAGE.margin, metricY + 53, REVIEW_PAGE.width - (REVIEW_PAGE.margin * 2), 2);
+    context.fillStyle = '#71717a';
+    context.font = '600 22px Inter, sans-serif';
+    context.fillText(label, REVIEW_PAGE.margin, metricY);
+    context.fillStyle = '#18181b';
+    context.font = '700 30px Inter, sans-serif';
+    context.textAlign = 'end';
+    context.fillText(String(value), REVIEW_PAGE.width - REVIEW_PAGE.margin, metricY - 5);
+    context.textAlign = 'start';
+    metricY += 100;
+  });
+
+  context.fillStyle = '#71717a';
+  context.font = '500 20px Inter, sans-serif';
+  context.fillText(new Intl.DateTimeFormat('en-US', { dateStyle: 'long', timeStyle: 'short' }).format(new Date()), REVIEW_PAGE.margin, 1490);
+  context.fillText('Powered by PixelPrism', REVIEW_PAGE.margin, 1530);
+  return canvas;
+}
+
+function drawReviewItemHeader(context, item, index, total, continued = false) {
+  drawReviewDocumentMark(context, item);
+  context.fillStyle = '#71717a';
+  context.font = '800 18px Inter, sans-serif';
+  context.fillText(`DESIGN REVIEW ${String(index + 1).padStart(2, '0')}/${String(total).padStart(2, '0')}${continued ? ' - CONTINUED' : ''}`, REVIEW_PAGE.margin, 170);
+  context.fillStyle = '#18181b';
+  context.font = '800 42px Inter, sans-serif';
+  const titleLines = wrappedCanvasLines(context, reviewPageLabel(item.url), REVIEW_PAGE.width - (REVIEW_PAGE.margin * 2));
+  const visibleTitleLines = titleLines.slice(0, 2);
+  drawReviewLines(context, visibleTitleLines, REVIEW_PAGE.margin, 210, 50, '#18181b');
+  const resolutionY = 210 + (visibleTitleLines.length * 50) + 10;
+  context.fillStyle = '#71717a';
+  context.font = '600 19px Inter, sans-serif';
+  context.fillText(`${item.viewport.width} x ${item.viewport.height}`, REVIEW_PAGE.margin, resolutionY);
+  return Math.max(360, resolutionY + 58);
+}
+
+function drawReviewScreenshot(context, image, y) {
+  const availableWidth = REVIEW_PAGE.width - (REVIEW_PAGE.margin * 2);
+  const maxHeight = 700;
+  const scale = Math.min(availableWidth / image.naturalWidth, maxHeight / image.naturalHeight, 1.8);
+  const width = Math.round(image.naturalWidth * scale);
+  const height = Math.round(image.naturalHeight * scale);
+  const x = Math.round((REVIEW_PAGE.width - width) / 2);
+  context.fillStyle = '#e4e4e7';
+  context.beginPath();
+  context.roundRect(x - 2, y - 2, width + 4, height + 4, 8);
+  context.fill();
+  context.save();
+  context.beginPath();
+  context.roundRect(x, y, width, height, 6);
+  context.clip();
+  context.drawImage(image, x, y, width, height);
+  context.restore();
+  return y + height + 42;
+}
+
+function drawReviewScreenshotError(context, message, y) {
+  context.fillStyle = '#ffffff';
+  context.beginPath();
+  context.roundRect(REVIEW_PAGE.margin, y, REVIEW_PAGE.width - (REVIEW_PAGE.margin * 2), 190, 10);
+  context.fill();
+  context.strokeStyle = '#d4d4d8';
+  context.strokeRect(REVIEW_PAGE.margin, y, REVIEW_PAGE.width - (REVIEW_PAGE.margin * 2), 190);
+  context.fillStyle = '#18181b';
+  context.font = '700 22px Inter, sans-serif';
+  context.fillText('Screenshot unavailable', REVIEW_PAGE.margin + 28, y + 38);
+  context.font = '500 18px Inter, sans-serif';
+  const lines = wrappedCanvasLines(context, message, REVIEW_PAGE.width - (REVIEW_PAGE.margin * 2) - 56);
+  drawReviewLines(context, lines.slice(0, 3), REVIEW_PAGE.margin + 28, y + 82, 27, '#71717a');
+  return y + 228;
+}
+
+function drawReviewTarget(context, item, y) {
+  const target = item.element?.selector || item.selector;
+  context.font = '700 17px Inter, sans-serif';
+  context.fillStyle = '#71717a';
+  context.fillText('TARGET', REVIEW_PAGE.margin, y);
+  context.font = '600 19px Inter, sans-serif';
+  const text = target ? `${target}${item.highlighted === false ? ' (could not be highlighted)' : ''}` : 'Page-level feedback';
+  const lines = wrappedCanvasLines(context, text, REVIEW_PAGE.width - (REVIEW_PAGE.margin * 2));
+  return drawReviewLines(context, lines, REVIEW_PAGE.margin, y + 30, 28, '#18181b') + 28;
+}
+
+async function drawReviewItemPages(item, index, total) {
+  const pages = [];
+  const createItemCanvas = () => {
+    const page = createReviewCanvas();
+    page.canvas.reviewUrl = item.url;
+    return page;
+  };
+  let current = createItemCanvas();
+  let y = drawReviewItemHeader(current.context, item, index, total);
+  if (item.screenshot) y = drawReviewScreenshot(current.context, await loadReviewImage(item.screenshot), y);
+  else y = drawReviewScreenshotError(current.context, item.captureError || 'Chrome did not return an image.', y);
+  y = drawReviewTarget(current.context, item, y);
+
+  const continuation = () => {
+    pages.push(current.canvas);
+    current = createItemCanvas();
+    y = drawReviewItemHeader(current.context, item, index, total, true);
+  };
+  const ensureSpace = (height) => {
+    if (y + height <= REVIEW_PAGE.height - 100) return;
+    continuation();
+  };
+  const sectionTitle = (title) => {
+    ensureSpace(120);
+    current.context.fillStyle = '#71717a';
+    current.context.font = '800 17px Inter, sans-serif';
+    current.context.fillText(title, REVIEW_PAGE.margin, y);
+    y += 42;
+  };
+  const bodyBlock = (text, prefix = '') => {
+    current.context.font = '500 21px Inter, sans-serif';
+    const maxWidth = REVIEW_PAGE.width - (REVIEW_PAGE.margin * 2) - (prefix ? 42 : 0);
+    const lines = wrappedCanvasLines(current.context, text, maxWidth);
+    let offset = 0;
+    while (offset < lines.length) {
+      const remainingLines = Math.max(1, Math.floor((REVIEW_PAGE.height - 110 - y) / 31));
+      if (remainingLines < 1 || y > REVIEW_PAGE.height - 150) {
+        continuation();
+        continue;
+      }
+      const slice = lines.slice(offset, offset + remainingLines);
+      if (prefix && offset === 0) {
+        current.context.fillStyle = '#71717a';
+        current.context.font = '800 20px Inter, sans-serif';
+        current.context.fillText(prefix, REVIEW_PAGE.margin, y);
+      }
+      current.context.font = '500 21px Inter, sans-serif';
+      y = drawReviewLines(current.context, slice, REVIEW_PAGE.margin + (prefix ? 42 : 0), y, 31, '#27272a') + 22;
+      offset += slice.length;
+      if (offset < lines.length) continuation();
+    }
+  };
+
+  if (item.comments.length) {
+    sectionTitle(item.comments.length === 1 ? 'COMMENT' : 'COMMENTS');
+    item.comments.forEach((comment, commentIndex) => bodyBlock(comment, `${commentIndex + 1}.`));
+  }
+  if (item.changes.length) {
+    sectionTitle(item.changes.length === 1 ? 'VISUAL CHANGE' : 'VISUAL CHANGES');
+    item.changes.forEach((change) => bodyBlock(describeReviewChange(change), '-'));
+  }
+  pages.push(current.canvas);
+  return pages;
+}
+
+function canvasToJpegPage(canvas) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(async (blob) => {
+      if (!blob) {
+        reject(new Error('A PDF page could not be rendered.'));
+        return;
+      }
+      resolve({
+        width: canvas.width,
+        height: canvas.height,
+        url: canvas.reviewUrl || '',
+        bytes: new Uint8Array(await blob.arrayBuffer())
+      });
+    }, 'image/jpeg', 0.9);
+  });
+}
+
+function joinByteArrays(parts) {
+  const size = parts.reduce((total, part) => total + part.length, 0);
+  const result = new Uint8Array(size);
+  let offset = 0;
+  parts.forEach((part) => { result.set(part, offset); offset += part.length; });
+  return result;
+}
+
+function pdfFromJpegPages(pages) {
+  const encode = (value) => new TextEncoder().encode(value);
+  const escapePdfString = (value) => String(value || '')
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)')
+    .replace(/[\r\n]+/g, '');
+  let nextObjectId = 3;
+  const pageDefinitions = pages.map((page) => {
+    const definition = {
+      page,
+      pageId: nextObjectId,
+      imageId: nextObjectId + 1,
+      contentId: nextObjectId + 2,
+      annotationId: page.url ? nextObjectId + 3 : null
+    };
+    nextObjectId += page.url ? 4 : 3;
+    return definition;
+  });
+  const objectCount = nextObjectId - 1;
+  const objects = new Array(objectCount + 1);
+  const pageIds = pageDefinitions.map(({ pageId }) => pageId);
+  objects[1] = [encode('<< /Type /Catalog /Pages 2 0 R >>')];
+  objects[2] = [encode(`<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pages.length} >>`)];
+  pageDefinitions.forEach(({ page, pageId, imageId, contentId, annotationId }) => {
+    const content = encode('q\n595 0 0 842 0 0 cm\n/Im0 Do\nQ\n');
+    const annotations = annotationId ? `/Annots [${annotationId} 0 R] ` : '';
+    objects[pageId] = [encode(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] ${annotations}/Resources << /XObject << /Im0 ${imageId} 0 R >> >> /Contents ${contentId} 0 R >>`)];
+    objects[imageId] = [
+      encode(`<< /Type /XObject /Subtype /Image /Width ${page.width} /Height ${page.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${page.bytes.length} >>\nstream\n`),
+      page.bytes,
+      encode('\nendstream')
+    ];
+    objects[contentId] = [encode(`<< /Length ${content.length} >>\nstream\n`), content, encode('endstream')];
+    if (annotationId) {
+      objects[annotationId] = [encode(`<< /Type /Annot /Subtype /Link /Rect [38 12 500 34] /Border [0 0 0] /A << /S /URI /URI (${escapePdfString(page.url)}) >> >>`)];
+    }
+  });
+
+  const parts = [encode('%PDF-1.4\n%\u00e2\u00e3\u00cf\u00d3\n')];
+  const offsets = new Array(objectCount + 1).fill(0);
+  let length = parts[0].length;
+  for (let id = 1; id <= objectCount; id += 1) {
+    offsets[id] = length;
+    const objectParts = [encode(`${id} 0 obj\n`), ...objects[id], encode('\nendobj\n')];
+    parts.push(...objectParts);
+    length += objectParts.reduce((total, part) => total + part.length, 0);
+  }
+  const xrefOffset = length;
+  parts.push(encode(`xref\n0 ${objectCount + 1}\n0000000000 65535 f \n`));
+  for (let id = 1; id <= objectCount; id += 1) {
+    parts.push(encode(`${String(offsets[id]).padStart(10, '0')} 00000 n \n`));
+  }
+  parts.push(encode(`trailer\n<< /Size ${objectCount + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`));
+  return new Blob([joinByteArrays(parts)], { type: 'application/pdf' });
+}
+
+async function downloadReviewPdf() {
+  const items = reviewItems();
+  if (!items.length) return;
+  if (!window.chrome?.runtime?.sendMessage || !window.chrome?.downloads?.download) {
+    notify('Review export is available after the extension is loaded in Chrome.', 'error');
+    return;
+  }
+  const originalLabel = reviewPdfExportButton.textContent;
+  reviewPdfExportButton.disabled = true;
+  handoffFabMenu.setAttribute('aria-busy', 'true');
+  try {
+    await document.fonts?.ready;
+    const contexts = reviewCaptureContexts(items);
+    let nextContext = 0;
+    let capturedItems = 0;
+    reviewPdfExportButton.textContent = `Capturing 0/${items.length}...`;
+    const captureNextContext = async () => {
+      while (nextContext < contexts.length) {
+        const context = contexts[nextContext];
+        nextContext += 1;
+        try {
+          const response = await promiseWithTimeout(window.chrome.runtime.sendMessage({
+            type: 'capture-review-context',
+            url: context.url,
+            width: context.viewport.width,
+            height: context.viewport.height,
+            // Screenshots show the live site as it is; edits are listed as before/after notes.
+            changes: [],
+            targets: context.targets
+          }), 20000, 'The page took too long to prepare.');
+          if (!response?.ok) throw new Error(response?.error || 'Unable to capture this page.');
+          const captures = new Map((response.captures || []).map((capture) => [capture.id, capture]));
+          context.targets.forEach(({ id }) => {
+            if (response.identity) items[id].siteIdentity = response.identity;
+            const capture = captures.get(id);
+            if (!capture) {
+              items[id].captureError = 'Chrome did not return this screenshot.';
+              return;
+            }
+            items[id].screenshot = capture.dataUrl;
+            items[id].highlighted = items[id].element ? capture.highlighted : undefined;
+          });
+        } catch (error) {
+          context.targets.forEach(({ id }) => { items[id].captureError = error.message; });
+        }
+        capturedItems += context.targets.length;
+        reviewPdfExportButton.textContent = `Captured ${Math.min(capturedItems, items.length)}/${items.length}...`;
+        speak(`${Math.min(capturedItems, items.length)} of ${items.length} review screenshots prepared.`);
+      }
+    };
+    const workerCount = Math.min(2, contexts.length);
+    await Promise.all(Array.from({ length: workerCount }, () => captureNextContext()));
+
+    const logoImages = new Map();
+    await Promise.all(items.map(async (item) => {
+      const logoDataUrl = item.siteIdentity?.logoDataUrl;
+      if (!logoDataUrl) return;
+      if (!logoImages.has(logoDataUrl)) {
+        logoImages.set(logoDataUrl, loadReviewImage(logoDataUrl).catch(() => null));
+      }
+      item.reviewLogoImage = await logoImages.get(logoDataUrl);
+    }));
+
+    const canvases = [drawReviewCover(items)];
+    for (let index = 0; index < items.length; index += 1) {
+      canvases.push(...await drawReviewItemPages(items[index], index, items.length));
+    }
+    canvases.forEach((canvas, index) => {
+      const context = canvas.getContext('2d');
+      context.save();
+      context.globalAlpha = 0.5;
+      context.fillStyle = '#71717a';
+      context.font = '500 16px Inter, sans-serif';
+      context.textAlign = 'start';
+      context.fillText(
+        ellipsizeCanvasText(context, canvas.reviewUrl, REVIEW_PAGE.width - (REVIEW_PAGE.margin * 2) - 150),
+        REVIEW_PAGE.margin,
+        REVIEW_PAGE.height - 58
+      );
+      context.restore();
+      context.fillStyle = '#a1a1aa';
+      context.font = '600 16px Inter, sans-serif';
+      context.textAlign = 'end';
+      context.fillText(`${index + 1} / ${canvases.length}`, REVIEW_PAGE.width - REVIEW_PAGE.margin, REVIEW_PAGE.height - 58);
+      context.textAlign = 'start';
+    });
+    reviewPdfExportButton.textContent = 'Building PDF...';
+    const jpegPages = [];
+    for (const canvas of canvases) jpegPages.push(await canvasToJpegPage(canvas));
+    const pdf = pdfFromJpegPages(jpegPages);
+    const objectUrl = URL.createObjectURL(pdf);
+    try {
+      await window.chrome.downloads.download({ url: objectUrl, filename: reviewFilename(), saveAs: false });
+    } finally {
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+    }
+    const missing = items.filter((item) => item.captureError).length;
+    notify(missing
+      ? `Review PDF downloaded. ${missing} screenshot${missing === 1 ? '' : 's'} could not be captured.`
+      : 'Review PDF downloaded.', missing ? 'error' : 'success');
+  } catch (error) {
+    notify(`Review PDF was not saved: ${error.message}`, 'error');
+  } finally {
+    reviewPdfExportButton.disabled = false;
+    reviewPdfExportButton.textContent = originalLabel;
+    handoffFabMenu.removeAttribute('aria-busy');
+  }
+}
+
+// HTML design review: one capture per page/viewport, with every comment and
+// CSS change of that viewport placed on it as a numbered marker.
+function reviewHtmlContexts() {
+  const contexts = new Map();
+  const contextFor = ({ url, viewport }) => {
+    const canonicalUrl = canonicalInspectorUrl(url || targetUrl);
+    const width = Math.round(Number(viewport?.width) || 0);
+    const height = Math.round(Number(viewport?.height) || 0);
+    const key = [canonicalUrl, width, height].join('\u0000');
+    if (!contexts.has(key)) {
+      contexts.set(key, { url: canonicalUrl, viewport: { width, height }, entries: [], targets: new Map() });
+    }
+    return contexts.get(key);
+  };
+  const addEntry = (source, entry) => {
+    const context = contextFor(source);
+    const element = source.element || null;
+    const selector = element?.selector || source.selector || '';
+    let targetId = null;
+    if (element || selector) {
+      targetId = reviewElementKey(element, selector);
+      if (!context.targets.has(targetId)) context.targets.set(targetId, { element, selector });
+    }
+    context.entries.push({ ...entry, selector, targetId, order: context.entries.length });
+  };
+
+  comments.forEach((comment) => addEntry(comment, { kind: 'comment', text: comment.comment }));
+  changeLog.forEach((change) => addEntry(change, {
+    kind: 'change',
+    property: change.property,
+    from: String(change.from || '').trim(),
+    to: String(change.to || '').trim(),
+    text: describeReviewChange(change)
+  }));
+
+  return [...contexts.values()]
+    .map((context) => ({
+      ...context,
+      targets: [...context.targets].map(([id, target]) => ({ id, target }))
+    }))
+    .sort((left, right) => (
+      left.url.localeCompare(right.url)
+      || left.viewport.width - right.viewport.width
+      || left.viewport.height - right.viewport.height
+    ));
+}
+
+function reviewHtmlViewport(context, pageIndex, viewportIndex, numberFrom) {
+  const shots = [...(context.shots || [])].sort((left, right) => left.scrollY - right.scrollY);
+  const placements = new Map();
+  shots.forEach((shot, shotIndex) => shot.rects.forEach((rect) => {
+    if (rect.found && rect.visible && !placements.has(rect.id)) placements.set(rect.id, { shot: shotIndex, rect });
+  }));
+  const unplaced = new Map((context.unplaced || []).map((rect) => [rect.id, rect]));
+  const topShot = Math.max(0, shots.findIndex((shot) => shot.scrollY === 0));
+  const placed = context.entries.map((entry) => {
+    if (!entry.targetId) return { entry, target: 'page', shot: topShot };
+    const placement = placements.get(entry.targetId);
+    if (placement) {
+      const { x, y, width, height } = placement.rect;
+      return { entry, target: 'element', shot: placement.shot, rect: { x, y, width, height } };
+    }
+    return { entry, target: unplaced.get(entry.targetId)?.found ? 'hidden' : 'missing', shot: 0 };
+  });
+  const rank = { page: 0, element: 1, hidden: 2, missing: 3 };
+  placed.sort((left, right) => (
+    rank[left.target] - rank[right.target]
+    || left.shot - right.shot
+    || (left.rect && right.rect ? (left.rect.y - right.rect.y) || (left.rect.x - right.rect.x) : 0)
+    || left.entry.order - right.entry.order
+  ));
+  const markersPerTarget = new Map();
+  const entries = placed.map(({ entry, target, shot, rect }, index) => {
+    const number = numberFrom + index;
+    const result = {
+      id: `${pageIndex}.${viewportIndex}.${number}`,
+      number,
+      kind: entry.kind,
+      text: entry.text,
+      selector: entry.selector,
+      target,
+      shot
+    };
+    if (entry.kind === 'change') Object.assign(result, { property: entry.property, from: entry.from, to: entry.to });
+    if (rect) {
+      const { width, height } = shots[shot];
+      const offset = markersPerTarget.get(entry.targetId) || 0;
+      markersPerTarget.set(entry.targetId, offset + 1);
+      const inset = 13;
+      result.rect = rect;
+      result.marker = {
+        x: Math.min(Math.max(rect.x, inset), Math.max(inset, width - inset - (offset * 24))),
+        y: Math.min(Math.max(rect.y, inset), Math.max(inset, height - inset)),
+        offset
+      };
+    }
+    return result;
+  });
+  return {
+    width: context.viewport.width,
+    height: context.viewport.height,
+    shots: shots.map((shot) => ({ src: shot.dataUrl, width: shot.width, height: shot.height, scrollY: shot.scrollY })),
+    error: shots.length ? undefined : (context.captureError || 'Chrome did not return an image.'),
+    entries
+  };
+}
+
+function reviewHtmlData(contexts) {
+  const pages = [];
+  const pagesByUrl = new Map();
+  contexts.forEach((context) => {
+    if (!pagesByUrl.has(context.url)) {
+      const page = { url: context.url, label: reviewPageLabel(context.url), contexts: [] };
+      pagesByUrl.set(context.url, page);
+      pages.push(page);
+    }
+    pagesByUrl.get(context.url).contexts.push(context);
+  });
+  const identity = contexts.find((context) => context.identity?.name || context.identity?.logoDataUrl)?.identity;
+  return {
+    id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    createdAt: new Date().toISOString(),
+    site: {
+      name: reviewSiteName({ url: pages[0]?.url, siteIdentity: identity }),
+      logo: identity?.logoDataUrl || ''
+    },
+    pages: pages.map((page, pageIndex) => {
+      let number = 1;
+      return {
+        url: page.url,
+        label: page.label,
+        viewports: page.contexts.map((context, viewportIndex) => {
+          const viewport = reviewHtmlViewport(context, pageIndex, viewportIndex, number);
+          number += viewport.entries.length;
+          return viewport;
+        })
+      };
+    })
+  };
+}
+
+async function buildReviewHtml(data) {
+  const response = await fetch(chrome.runtime.getURL('review-viewer.html'));
+  if (!response.ok) throw new Error('The review template could not be loaded.');
+  const template = await response.text();
+  const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`);
+  // Keep the embedded JSON from closing its <script> element early.
+  const json = JSON.stringify(data)
+    .replace(/</g, '\\u003c')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+  return template
+    .replace('{{PIXELPRISM_REVIEW_TITLE}}', () => escapeHtml(`Design Review · ${data.site.name}`))
+    .replace('{{PIXELPRISM_REVIEW_DATA}}', () => json);
+}
+
+function reviewHtmlFilename() {
+  return reviewFilename().replace(/\.pdf$/, '.html');
+}
+
+async function downloadReviewHtml() {
+  const contexts = reviewHtmlContexts();
+  if (!contexts.length) return;
+  if (!window.chrome?.runtime?.sendMessage || !window.chrome?.downloads?.download) {
+    notify('Review export is available after the extension is loaded in Chrome.', 'error');
+    return;
+  }
+  const originalLabel = reviewExportButton.textContent;
+  reviewExportButton.disabled = true;
+  handoffFabMenu.setAttribute('aria-busy', 'true');
+  try {
+    let nextContext = 0;
+    let captured = 0;
+    reviewExportButton.textContent = `Capturing 0/${contexts.length}...`;
+    const captureNextContext = async () => {
+      while (nextContext < contexts.length) {
+        const context = contexts[nextContext];
+        nextContext += 1;
+        try {
+          const response = await promiseWithTimeout(window.chrome.runtime.sendMessage({
+            type: 'capture-review-page',
+            url: context.url,
+            width: context.viewport.width,
+            height: context.viewport.height,
+            // Screenshots show the live site as it is; edits are listed as before/after notes.
+            changes: [],
+            targets: context.targets
+          }), 30000 + (context.targets.length * 12000), 'The page took too long to prepare.');
+          if (!response?.ok) throw new Error(response?.error || 'Unable to capture this page.');
+          context.shots = response.shots;
+          context.unplaced = response.unplaced;
+          context.identity = response.identity;
+        } catch (error) {
+          context.captureError = error.message;
+        }
+        captured += 1;
+        reviewExportButton.textContent = `Captured ${captured}/${contexts.length}...`;
+        speak(`${captured} of ${contexts.length} review screenshots prepared.`);
+      }
+    };
+    const workerCount = Math.min(2, contexts.length);
+    await Promise.all(Array.from({ length: workerCount }, () => captureNextContext()));
+
+    reviewExportButton.textContent = 'Building review...';
+    const html = await buildReviewHtml(reviewHtmlData(contexts));
+    const objectUrl = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
+    try {
+      await window.chrome.downloads.download({ url: objectUrl, filename: reviewHtmlFilename(), saveAs: false });
+    } finally {
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+    }
+    const missing = contexts.filter((context) => context.captureError).length;
+    notify(missing
+      ? `Design review downloaded. ${missing} screenshot${missing === 1 ? '' : 's'} could not be captured.`
+      : 'Design review downloaded.', missing ? 'error' : 'success');
+  } catch (error) {
+    notify(`Design review was not saved: ${error.message}`, 'error');
+  } finally {
+    reviewExportButton.disabled = false;
+    reviewExportButton.textContent = originalLabel;
+    handoffFabMenu.removeAttribute('aria-busy');
   }
 }
 
@@ -1762,6 +2559,14 @@ changeReportButton.addEventListener('click', async () => {
 });
 copyCodexButton.addEventListener('click', async () => {
   await copyForCodex();
+  setHandoffFabOpen(false);
+});
+reviewExportButton.addEventListener('click', async () => {
+  await downloadReviewHtml();
+  setHandoffFabOpen(false);
+});
+reviewPdfExportButton.addEventListener('click', async () => {
+  await downloadReviewPdf();
   setHandoffFabOpen(false);
 });
 

@@ -92,7 +92,7 @@
         <button type="button" class="comments-panel-close" id="comments-panel-close" aria-label="Close Comments" title="Close Comments"><span data-phosphor-icon="x"></span></button>
       </header>
       <form class="comments-form" id="comments-form">
-        <textarea id="comment-input" name="comment" rows="4" maxlength="2000" aria-label="Comment" placeholder="Write a note for the agent..."></textarea>
+        <textarea id="comment-input" name="comment" rows="4" maxlength="2000" aria-label="Comment" placeholder="Write a review note..."></textarea>
         <button type="submit">Add</button>
       </form>
       <section class="comments-list-wrap" aria-labelledby="comments-list-title">
@@ -106,8 +106,18 @@
         <span data-phosphor-icon="download"></span>
       </button>
       <div class="handoff-fab-menu" id="handoff-fab-menu" hidden>
-        <button class="handoff-fab-action" id="change-report-button" type="button">Download .md</button>
-        <button class="handoff-fab-action" id="copy-codex-button" type="button">Copy for Codex</button>
+        <p class="handoff-fab-section" id="handoff-agent-title">Agent</p>
+        <div class="handoff-fab-group" role="group" aria-labelledby="handoff-agent-title">
+          <button class="handoff-fab-action" id="change-report-button" type="button">Export MD</button>
+          <button class="handoff-fab-action" id="copy-codex-button" type="button">Copy review</button>
+        </div>
+        <hr class="handoff-fab-divider">
+        <p class="handoff-fab-section" id="handoff-review-title">Design review</p>
+        <div class="handoff-fab-group" role="group" aria-labelledby="handoff-review-title">
+          <button class="handoff-fab-action" id="review-pdf-export-button" type="button">Export PDF</button>
+          <button class="handoff-fab-action" id="review-export-button" type="button">Export HTML</button>
+        </div>
+        <hr class="handoff-fab-divider">
         <button class="handoff-fab-close" id="handoff-fab-close" type="button">Close</button>
       </div>
     </div>

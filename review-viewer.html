@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="PixelPrism">
+<title>{{PIXELPRISM_REVIEW_TITLE}}</title>
+<style>
+:root {
+  --ink: #18181b;
+  --text: #27272a;
+  --muted: #71717a;
+  --faint: #a1a1aa;
+  --line: #e4e4e7;
+  --soft: #fafafa;
+  --hover: #f4f4f5;
+  --stage: #ececef;
+  --accent: #ef4444;
+  --accent-ink: #b91c1c;
+  --accent-soft: #fef2f2;
+  --done: #16a34a;
+  --focus: #5367d9;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; overflow: hidden; background: #fff; color: var(--ink); font: 600 12px/1.35 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+[hidden] { display: none !important; }
+
+.app { display: grid; grid-template-rows: 56px minmax(0, 1fr); height: 100vh; }
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.brand-logo { display: grid; place-items: center; flex: none; width: 28px; height: 28px; overflow: hidden; border: 1px solid var(--line); border-radius: 6px; background: var(--soft); color: var(--muted); font-size: 13px; font-weight: 800; }
+.brand-logo img { width: 20px; height: 20px; object-fit: contain; }
+.brand-text { min-width: 0; }
+.brand-text strong { display: block; overflow: hidden; font-size: 13px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.brand-text span { display: block; overflow: hidden; color: var(--muted); font-size: 11px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.progress { display: flex; align-items: center; gap: 10px; flex: none; color: var(--muted); font-size: 11px; font-weight: 600; }
+.progress-bar { width: 120px; height: 4px; overflow: hidden; border-radius: 999px; background: var(--hover); }
+.progress-bar i { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--done); transition: width 200ms ease; }
+
+.layout { display: grid; grid-template-columns: 248px minmax(0, 1fr) 320px; min-height: 0; }
+.panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; background: #fff; }
+.pages-panel { border-right: 1px solid var(--line); }
+.comments-panel { border-left: 1px solid var(--line); }
+.panel-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 12px; }
+.panel-header > div { min-width: 0; }
+.panel-count { flex: none; padding-top: 1px; color: var(--muted); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.panel-count.is-complete { color: var(--done); }
+.panel-header h2 { margin: 0; font-size: 12px; font-weight: 800; }
+.panel-header p { margin: 4px 0 0; overflow: hidden; color: var(--muted); font-size: 11px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.panel-body { flex: 1; min-height: 0; overflow: auto; padding: 0 12px 12px; }
+
+.pages-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.page-item { display: grid; gap: 2px; width: 100%; padding: 8px; border: 0; border-radius: 4px; background: var(--soft); text-align: left; }
+.page-item:hover { background: var(--hover); }
+.page-item[aria-current="true"] { background: var(--ink); color: #fff; }
+.page-item-title { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.page-item-name { flex: 1; min-width: 0; overflow: hidden; font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.page-item-count { flex: none; margin-left: auto; text-align: right; color: var(--muted); font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.page-item[aria-current="true"] .page-item-count, .page-item[aria-current="true"] small { color: #d4d4d8; }
+.page-item small { display: block; overflow: hidden; color: var(--muted); font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.page-item.is-complete .page-item-count { color: var(--done); }
+.page-item[aria-current="true"].is-complete .page-item-count { color: #86efac; }
+
+.stage-wrap { display: grid; grid-template-rows: 44px minmax(0, 1fr); min-width: 0; min-height: 0; background: var(--stage); }
+.toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px; padding: 0 12px; border-bottom: 1px solid var(--line); background: #fff; }
+.stage-title { grid-column: 1; display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.stage-title a { overflow: hidden; color: var(--ink); font-size: 12px; font-weight: 700; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
+.stage-title a:hover { text-decoration: underline; }
+.stage-title span { flex: none; color: var(--muted); font-size: 11px; font-weight: 500; }
+.zoom { grid-column: 3; justify-self: end; display: flex; align-items: center; gap: 2px; flex: none; padding: 2px; border: 1px solid var(--line); border-radius: 6px; }
+.zoom button { display: grid; place-items: center; min-width: 26px; height: 24px; padding: 0 6px; border: 0; border-radius: 4px; background: transparent; color: var(--text); font-size: 11px; font-weight: 700; }
+.zoom button:hover { background: var(--hover); }
+.zoom button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+.zoom svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.zoom-value { min-width: 48px !important; font-variant-numeric: tabular-nums; }
+.shots-nav { grid-column: 2; display: flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 6px; }
+.shots-nav button { display: grid; place-items: center; width: 26px; height: 24px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--text); }
+.shots-nav button:hover:not(:disabled) { background: var(--hover); }
+.shots-nav button:disabled { color: var(--faint); cursor: default; }
+.shots-nav svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.shots-nav span { min-width: 64px; color: var(--text); font-size: 11px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
+.zoom-divider { width: 1px; height: 16px; margin: 0 2px; background: var(--line); }
+
+.stage { position: relative; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.stage.is-dragging { cursor: grabbing; user-select: none; }
+.canvas { position: relative; margin: 24px auto; overflow: hidden; background: #fff; box-shadow: 0 0 0 1px rgba(24, 24, 27, .08), 0 8px 28px rgba(24, 24, 27, .12); }
+.canvas img { display: block; width: 100%; height: 100%; user-select: none; -webkit-user-drag: none; }
+.overlay { position: absolute; inset: 0; }
+.highlight { position: absolute; border: 2px solid var(--accent); border-radius: 3px; background: rgba(239, 68, 68, .06); box-shadow: 0 0 0 9999px rgba(24, 24, 27, .32); pointer-events: none; transition: left 160ms ease, top 160ms ease, width 160ms ease, height 160ms ease; }
+.marker { position: absolute; z-index: 1; display: grid; place-items: center; min-width: 22px; height: 22px; margin: -11px 0 0 -11px; padding: 0 5px; border: 2px solid #fff; border-radius: 999px; background: var(--accent); color: #fff; box-shadow: 0 2px 6px rgba(24, 24, 27, .3); font-size: 11px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; transform: translateX(var(--offset, 0px)) scale(var(--scale, 1)); transition: transform 120ms ease, opacity 120ms ease, background 120ms ease; }
+.marker:hover { --scale: 1.12; }
+.marker.is-done { background: var(--faint); }
+.overlay.has-selection .marker { opacity: .4; }
+.overlay.has-selection .marker.is-selected { z-index: 2; opacity: 1; --scale: 1.18; box-shadow: 0 0 0 4px rgba(239, 68, 68, .28), 0 2px 8px rgba(24, 24, 27, .35); }
+.stage-empty { display: grid; place-items: center; height: 100%; padding: 24px; color: var(--muted); font-size: 12px; font-weight: 500; text-align: center; }
+.stage-empty strong { display: block; margin-bottom: 4px; color: var(--ink); font-weight: 700; }
+
+.vp-group + .vp-group { margin-top: 12px; }
+.vp-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; margin: 0 0 4px; padding: 6px 8px; border: 0; border-radius: 4px; background: transparent; text-align: left; }
+.vp-header:hover { background: var(--hover); }
+.vp-header strong { font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.vp-header span { color: var(--muted); font-size: 10px; font-weight: 600; }
+.vp-group.is-active .vp-header { background: var(--hover); box-shadow: inset 2px 0 0 var(--ink); }
+.comments-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.comment-item { position: relative; display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; padding: 8px 36px 8px 8px; border-radius: 4px; background: var(--soft); cursor: pointer; transition: background 120ms ease, box-shadow 120ms ease; }
+.comment-item:hover { background: var(--hover); }
+.comment-item.is-selected { background: var(--accent-soft); box-shadow: inset 0 0 0 1px rgba(239, 68, 68, .45); }
+.comment-number { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.comment-item.is-page .comment-number { background: var(--ink); }
+.comment-item.is-missing .comment-number { background: #fff; color: var(--muted); box-shadow: inset 0 0 0 1.5px var(--faint); }
+.comment-body { min-width: 0; }
+.comment-body p { margin: 0; overflow-wrap: anywhere; color: var(--text); font-size: 12px; font-weight: 500; white-space: pre-wrap; }
+.comment-body code { padding: 0 3px; border-radius: 3px; background: rgba(24, 24, 27, .06); font: 600 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.comment-body small { display: block; margin-top: 2px; overflow: hidden; color: var(--muted); font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.comment-kind { display: inline-block; margin-bottom: 2px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; }
+.comment-item.is-done .comment-number { background: var(--faint); box-shadow: none; color: #fff; }
+.comment-item.is-done .comment-body p, .comment-item.is-done .comment-body small, .comment-item.is-done .comment-kind { color: var(--faint); text-decoration: line-through; }
+.comment-item.is-done .comment-body code { background: transparent; }
+.comment-check { position: absolute; top: 7px; right: 7px; display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--muted); }
+.comment-check:hover { background: rgba(24, 24, 27, .06); color: var(--ink); }
+.comment-check i { display: grid; place-items: center; width: 16px; height: 16px; border: 1.5px solid #a1a1aa; border-radius: 4px; background: #fff; }
+.comment-check svg { width: 12px; height: 12px; fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; opacity: 0; }
+.comment-check[aria-checked="true"] i { border-color: var(--done); background: var(--done); }
+.comment-check[aria-checked="true"] svg { opacity: 1; }
+.empty-note { margin: 4px 0 0; color: var(--muted); font-size: 11px; font-weight: 500; }
+.footer-note { padding: 10px 12px; border-top: 1px solid var(--line); color: var(--faint); font-size: 10px; font-weight: 600; }
+
+@media (max-width: 1100px) {
+  .layout { grid-template-columns: 200px minmax(0, 1fr) 280px; }
+  .progress-bar { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-logo" id="brand-logo"></div>
+      <div class="brand-text"><strong id="brand-name"></strong><span id="brand-meta"></span></div>
+    </div>
+    <div class="progress" aria-live="polite"><span id="progress-label"></span><div class="progress-bar"><i id="progress-fill"></i></div></div>
+  </header>
+  <div class="layout">
+    <aside class="panel pages-panel" aria-labelledby="pages-title">
+      <header class="panel-header"><div><h2 id="pages-title">Pages</h2><p id="pages-meta"></p></div></header>
+      <nav class="panel-body"><ol class="pages-list" id="pages-list"></ol></nav>
+    </aside>
+    <main class="stage-wrap">
+      <div class="toolbar">
+        <div class="stage-title"><a id="stage-link" target="_blank" rel="noopener noreferrer"></a><span id="stage-meta"></span></div>
+        <div class="shots-nav" id="shots-nav" role="group" aria-label="Screens">
+          <button type="button" id="shot-prev" aria-label="Previous screen" title="Previous screen ([)"><svg viewBox="0 0 16 16"><path d="M10 3.5L5.5 8l4.5 4.5"/></svg></button>
+          <span id="shot-label"></span>
+          <button type="button" id="shot-next" aria-label="Next screen" title="Next screen (])"><svg viewBox="0 0 16 16"><path d="M6 3.5L10.5 8 6 12.5"/></svg></button>
+        </div>
+        <div class="zoom" role="group" aria-label="Zoom">
+          <button type="button" id="zoom-out" aria-label="Zoom out" title="Zoom out (−)"><svg viewBox="0 0 16 16"><path d="M3.5 8h9"/></svg></button>
+          <button type="button" class="zoom-value" id="zoom-value" title="Reset to 100% (1)">100%</button>
+          <button type="button" id="zoom-in" aria-label="Zoom in" title="Zoom in (+)"><svg viewBox="0 0 16 16"><path d="M3.5 8h9M8 3.5v9"/></svg></button>
+          <span class="zoom-divider"></span>
+          <button type="button" id="zoom-fit" aria-pressed="true" title="Fit to screen (0)">Fit</button>
+          <button type="button" id="zoom-actual" aria-pressed="false" title="Actual size (1)">100%</button>
+        </div>
+      </div>
+      <div class="stage" id="stage" tabindex="-1">
+        <div class="canvas" id="canvas" hidden><img id="screenshot" alt=""><div class="overlay" id="overlay"></div></div>
+        <div class="stage-empty" id="stage-empty" hidden></div>
+      </div>
+    </main>
+    <aside class="panel comments-panel" aria-labelledby="comments-title">
+      <header class="panel-header"><div><h2 id="comments-title">Comments</h2><p id="comments-meta"></p></div><span class="panel-count" id="comments-count" title="Resolved comments"></span></header>
+      <div class="panel-body" id="comments-groups"></div>
+      <div class="footer-note" id="footer-note">Powered by PixelPrism</div>
+    </aside>
+  </div>
+</div>
+<script type="application/json" id="pixelprism-review-data">{{PIXELPRISM_REVIEW_DATA}}</script>
+<script>
+(() => {
+  const data = JSON.parse(document.getElementById('pixelprism-review-data').textContent);
+  const $ = (selector) => document.querySelector(selector);
+  const ZOOM_STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4];
+  const STORAGE_KEY = `pixelprism-review:${data.id}`;
+  const CHECK_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg>';
+
+  const state = { page: 0, viewport: 0, shot: 0, selected: null, zoom: 1, fit: true, done: new Set() };
+  try {
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    if (Array.isArray(stored)) stored.forEach((id) => state.done.add(id));
+  } catch { /* Storage can be unavailable for file:// pages; checkmarks then last for the session. */ }
+
+  const saveDone = () => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify([...state.done])); } catch { /* See above. */ }
+  };
+  const el = (tag, className, text) => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  };
+  const pageEntries = (page) => page.viewports.flatMap((viewport) => viewport.entries);
+  const currentPage = () => data.pages[state.page];
+  const currentViewport = () => currentPage().viewports[state.viewport];
+  const findEntry = (id) => {
+    for (const [pageIndex, page] of data.pages.entries()) {
+      for (const [viewportIndex, viewport] of page.viewports.entries()) {
+        const entry = viewport.entries.find((candidate) => candidate.id === id);
+        if (entry) return { entry, pageIndex, viewportIndex };
+      }
+    }
+    return null;
+  };
+  const viewportLabel = (viewport) => `${viewport.width} × ${viewport.height}`;
+  const currentShot = () => currentViewport().shots[state.shot] || null;
+  const captureLabel = (viewport) => {
+    if (!viewport.shots.length) return 'No screenshot';
+    return viewport.shots.length === 1 ? '1 screen' : `${viewport.shots.length} screens`;
+  };
+
+  // Header
+  const logo = $('#brand-logo');
+  if (data.site.logo) {
+    const image = el('img');
+    image.src = data.site.logo;
+    image.alt = '';
+    logo.append(image);
+  } else {
+    logo.textContent = (data.site.name || 'W').trim().charAt(0).toUpperCase();
+  }
+  $('#brand-name').textContent = data.site.name || 'Design Review';
+  const created = new Date(data.createdAt);
+  $('#brand-meta').textContent = `Design Review · ${Number.isNaN(created.valueOf()) ? '' : new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(created)}`;
+  $('#pages-meta').textContent = `${data.pages.length} ${data.pages.length === 1 ? 'page' : 'pages'}`;
+
+  function renderProgress() {
+    const all = data.pages.flatMap(pageEntries);
+    const done = all.filter((entry) => state.done.has(entry.id)).length;
+    $('#progress-label').textContent = `${done} of ${all.length} resolved`;
+    $('#progress-fill').style.width = all.length ? `${(done / all.length) * 100}%` : '0';
+  }
+
+  function renderPages() {
+    $('#pages-list').replaceChildren(...data.pages.map((page, index) => {
+      const entries = pageEntries(page);
+      const done = entries.filter((entry) => state.done.has(entry.id)).length;
+      const item = el('li');
+      const button = el('button', 'page-item');
+      button.type = 'button';
+      button.dataset.page = String(index);
+      button.setAttribute('aria-current', String(index === state.page));
+      button.classList.toggle('is-complete', entries.length > 0 && done === entries.length);
+      const title = el('div', 'page-item-title');
+      title.append(el('span', 'page-item-name', page.label), el('span', 'page-item-count', `${done}/${entries.length}`));
+      button.title = page.url;
+      button.append(title, el('small', '', page.viewports.map(viewportLabel).join(' · ')));
+      item.append(button);
+      return item;
+    }));
+  }
+
+  function entryText(entry, paragraph) {
+    if (entry.kind !== 'change') {
+      paragraph.textContent = entry.text;
+      return;
+    }
+    const property = el('code', '', entry.property);
+    const from = el('code', '', entry.from || 'none');
+    const to = el('code', '', entry.to || 'removed');
+    paragraph.append(property, ': ', from, ' → ', to);
+  }
+
+  function entryMeta(entry) {
+    if (entry.target === 'page') return 'Whole page';
+    const selector = entry.selector || 'Element';
+    if (entry.target === 'missing') return `${selector} · not found on the captured page`;
+    if (entry.target === 'hidden') return `${selector} · not visible on the captured page`;
+    return selector;
+  }
+
+  function renderComments() {
+    const page = currentPage();
+    const entries = pageEntries(page);
+    const done = entries.filter((entry) => state.done.has(entry.id)).length;
+    $('#comments-meta').textContent = page.label;
+    const count = $('#comments-count');
+    count.textContent = `${done}/${entries.length}`;
+    count.classList.toggle('is-complete', entries.length > 0 && done === entries.length);
+    $('#comments-groups').replaceChildren(...page.viewports.map((viewport, viewportIndex) => {
+      const group = el('section', 'vp-group');
+      group.classList.toggle('is-active', viewportIndex === state.viewport);
+      const header = el('button', 'vp-header');
+      header.type = 'button';
+      header.dataset.viewport = String(viewportIndex);
+      header.title = 'Show this viewport';
+      header.append(el('strong', '', viewportLabel(viewport)), el('span', '', `${captureLabel(viewport)} · ${viewport.entries.length}`));
+      const list = el('ol', 'comments-list');
+      viewport.entries.forEach((entry) => {
+        const isDone = state.done.has(entry.id);
+        const item = el('li', 'comment-item');
+        item.dataset.entry = entry.id;
+        item.classList.toggle('is-page', entry.target === 'page');
+        item.classList.toggle('is-missing', entry.target === 'missing' || entry.target === 'hidden');
+        item.classList.toggle('is-done', isDone);
+        item.classList.toggle('is-selected', entry.id === state.selected);
+        item.tabIndex = 0;
+        const number = el('span', 'comment-number', String(entry.number));
+        const body = el('div', 'comment-body');
+        if (entry.kind === 'change') body.append(el('span', 'comment-kind', 'CSS change'));
+        const paragraph = el('p');
+        entryText(entry, paragraph);
+        body.append(paragraph, el('small', '', entryMeta(entry)));
+        const check = el('button', 'comment-check');
+        check.type = 'button';
+        check.dataset.check = entry.id;
+        check.setAttribute('role', 'checkbox');
+        check.setAttribute('aria-checked', String(isDone));
+        check.setAttribute('aria-label', `Mark comment ${entry.number} as ${isDone ? 'not done' : 'done'}`);
+        check.title = isDone ? 'Mark as not done' : 'Mark as done';
+        const box = el('i');
+        box.innerHTML = CHECK_ICON;
+        check.append(box);
+        item.append(number, body, check);
+        list.append(item);
+      });
+      group.append(header, list);
+      return group;
+    }));
+  }
+
+  // Stage
+  const stage = $('#stage');
+  const canvas = $('#canvas');
+  const screenshot = $('#screenshot');
+  const overlay = $('#overlay');
+  const stageEmpty = $('#stage-empty');
+  const STAGE_PADDING = 24;
+
+  function fitZoom() {
+    const shot = currentShot();
+    if (!shot) return 1;
+    const availableWidth = Math.max(80, stage.clientWidth - (STAGE_PADDING * 2));
+    const availableHeight = Math.max(80, stage.clientHeight - (STAGE_PADDING * 2));
+    return Math.min(1, availableWidth / shot.width, availableHeight / shot.height);
+  }
+
+  function applyZoom(zoom, anchor) {
+    const shot = currentShot();
+    if (!shot) return;
+    const next = Math.min(4, Math.max(0.1, zoom));
+    const previous = state.zoom;
+    const rect = stage.getBoundingClientRect();
+    const anchorX = anchor ? anchor.x - rect.left : stage.clientWidth / 2;
+    const anchorY = anchor ? anchor.y - rect.top : stage.clientHeight / 2;
+    const contentX = (stage.scrollLeft + anchorX - canvas.offsetLeft) / previous;
+    const contentY = (stage.scrollTop + anchorY - canvas.offsetTop) / previous;
+    state.zoom = next;
+    canvas.style.width = `${Math.round(shot.width * next)}px`;
+    canvas.style.height = `${Math.round(shot.height * next)}px`;
+    stage.scrollLeft = (contentX * next) + canvas.offsetLeft - anchorX;
+    stage.scrollTop = (contentY * next) + canvas.offsetTop - anchorY;
+    $('#zoom-value').textContent = `${Math.round(next * 100)}%`;
+    $('#zoom-fit').setAttribute('aria-pressed', String(state.fit));
+    $('#zoom-actual').setAttribute('aria-pressed', String(!state.fit && Math.abs(next - 1) < 0.001));
+  }
+
+  function setFit() {
+    state.fit = true;
+    applyZoom(fitZoom());
+  }
+
+  function stepZoom(direction, anchor) {
+    state.fit = false;
+    const current = state.zoom;
+    const next = direction > 0
+      ? ZOOM_STEPS.find((step) => step > current + 0.001) ?? ZOOM_STEPS[ZOOM_STEPS.length - 1]
+      : [...ZOOM_STEPS].reverse().find((step) => step < current - 0.001) ?? ZOOM_STEPS[0];
+    applyZoom(next, anchor);
+  }
+
+  const percent = (value, total) => `${(value / total) * 100}%`;
+
+  function renderOverlay() {
+    const viewport = currentViewport();
+    const shot = currentShot();
+    overlay.replaceChildren();
+    overlay.classList.toggle('has-selection', Boolean(state.selected));
+    if (!shot) return;
+    const onShot = viewport.entries.filter((entry) => entry.shot === state.shot);
+    const selected = onShot.find((entry) => entry.id === state.selected);
+    if (selected?.rect) {
+      const highlight = el('div', 'highlight');
+      highlight.style.left = percent(selected.rect.x, shot.width);
+      highlight.style.top = percent(selected.rect.y, shot.height);
+      highlight.style.width = percent(selected.rect.width, shot.width);
+      highlight.style.height = percent(selected.rect.height, shot.height);
+      overlay.append(highlight);
+    }
+    onShot.forEach((entry) => {
+      if (!entry.marker) return;
+      const marker = el('button', 'marker', String(entry.number));
+      marker.type = 'button';
+      marker.dataset.entry = entry.id;
+      marker.setAttribute('aria-label', `Comment ${entry.number}`);
+      marker.classList.toggle('is-done', state.done.has(entry.id));
+      marker.classList.toggle('is-selected', entry.id === state.selected);
+      marker.style.left = percent(entry.marker.x, shot.width);
+      marker.style.top = percent(entry.marker.y, shot.height);
+      if (entry.marker.offset) marker.style.setProperty('--offset', `${entry.marker.offset * 24}px`);
+      overlay.append(marker);
+    });
+  }
+
+  function renderStage() {
+    const page = currentPage();
+    const viewport = currentViewport();
+    const link = $('#stage-link');
+    link.textContent = page.label;
+    link.href = page.url;
+    link.title = page.url;
+    $('#stage-meta').textContent = viewportLabel(viewport);
+    const shot = currentShot();
+    const shotCount = viewport.shots.length;
+    $('#shots-nav').hidden = shotCount < 2;
+    $('#shot-label').textContent = `Screen ${state.shot + 1}/${shotCount}`;
+    $('#shot-prev').disabled = state.shot <= 0;
+    $('#shot-next').disabled = state.shot >= shotCount - 1;
+    canvas.hidden = !shot;
+    stageEmpty.hidden = Boolean(shot);
+    document.querySelectorAll('.zoom button').forEach((button) => { button.disabled = !shot; });
+    if (!shot) {
+      const strong = el('strong', '', 'Screenshot unavailable');
+      stageEmpty.replaceChildren(el('div'));
+      stageEmpty.firstChild.append(strong, viewport.error || 'Chrome did not return an image for this viewport.');
+      return;
+    }
+    if (screenshot.getAttribute('src') !== shot.src) screenshot.src = shot.src;
+    state.fit = true;
+    state.zoom = fitZoom();
+    canvas.style.width = `${Math.round(shot.width * state.zoom)}px`;
+    canvas.style.height = `${Math.round(shot.height * state.zoom)}px`;
+    stage.scrollTo(0, 0);
+    applyZoom(state.zoom);
+    renderOverlay();
+  }
+
+  function render() {
+    renderProgress();
+    renderPages();
+    renderComments();
+  }
+
+  function scrollEntryIntoStage(entry) {
+    const shot = currentShot();
+    if (!shot || !entry.rect) return;
+    const zoom = state.zoom;
+    const centerX = canvas.offsetLeft + ((entry.rect.x + (entry.rect.width / 2)) * zoom);
+    const top = canvas.offsetTop + (entry.rect.y * zoom);
+    const height = entry.rect.height * zoom;
+    const targetTop = height > stage.clientHeight - 80 ? top - 40 : top + (height / 2) - (stage.clientHeight / 2);
+    stage.scrollTo({ left: centerX - (stage.clientWidth / 2), top: targetTop, behavior: 'smooth' });
+  }
+
+  function scrollEntryIntoPanel(id) {
+    const item = document.querySelector(`.comment-item[data-entry="${CSS.escape(id)}"]`);
+    item?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+
+  function selectPage(index) {
+    if (index === state.page) return;
+    state.page = index;
+    state.viewport = 0;
+    state.shot = 0;
+    state.selected = null;
+    render();
+    renderStage();
+    $('#comments-groups').scrollTop = 0;
+  }
+
+  function selectViewport(index) {
+    if (index === state.viewport) return;
+    state.viewport = index;
+    state.shot = 0;
+    state.selected = null;
+    renderComments();
+    renderStage();
+  }
+
+  function selectEntry(id, { fromMarker = false } = {}) {
+    const found = findEntry(id);
+    if (!found) return;
+    const pageChanged = found.pageIndex !== state.page;
+    const viewportChanged = pageChanged || found.viewportIndex !== state.viewport || found.entry.shot !== state.shot;
+    state.page = found.pageIndex;
+    state.viewport = found.viewportIndex;
+    state.shot = found.entry.shot || 0;
+    state.selected = state.selected === id && fromMarker ? null : id;
+    if (pageChanged) renderPages();
+    renderComments();
+    if (viewportChanged) renderStage();
+    else renderOverlay();
+    if (!state.selected) return;
+    scrollEntryIntoPanel(id);
+    if (!fromMarker) scrollEntryIntoStage(found.entry);
+  }
+
+  function selectShot(index) {
+    const count = currentViewport().shots.length;
+    if (index < 0 || index >= count || index === state.shot) return;
+    state.shot = index;
+    const selected = currentViewport().entries.find((entry) => entry.id === state.selected);
+    if (selected && selected.shot !== index) state.selected = null;
+    renderComments();
+    renderStage();
+  }
+
+  function clearSelection() {
+    if (!state.selected) return;
+    state.selected = null;
+    renderComments();
+    renderOverlay();
+  }
+
+  function toggleDone(id) {
+    if (state.done.has(id)) state.done.delete(id);
+    else state.done.add(id);
+    saveDone();
+    render();
+    renderOverlay();
+  }
+
+  function moveSelection(direction) {
+    const entries = pageEntries(currentPage());
+    if (!entries.length) return;
+    const index = entries.findIndex((entry) => entry.id === state.selected);
+    const next = index < 0 ? (direction > 0 ? 0 : entries.length - 1) : Math.min(entries.length - 1, Math.max(0, index + direction));
+    selectEntry(entries[next].id);
+  }
+
+  // Events
+  $('#pages-list').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-page]');
+    if (button) selectPage(Number(button.dataset.page));
+  });
+
+  $('#comments-groups').addEventListener('click', (event) => {
+    const check = event.target.closest('[data-check]');
+    if (check) {
+      toggleDone(check.dataset.check);
+      return;
+    }
+    const header = event.target.closest('[data-viewport]');
+    if (header) {
+      selectViewport(Number(header.dataset.viewport));
+      return;
+    }
+    const item = event.target.closest('.comment-item');
+    if (item) selectEntry(item.dataset.entry);
+  });
+
+  $('#comments-groups').addEventListener('keydown', (event) => {
+    const item = event.target.closest('.comment-item');
+    if (!item || event.target !== item) return;
+    if (event.key === 'Enter') { event.preventDefault(); selectEntry(item.dataset.entry); }
+    if (event.key === ' ') { event.preventDefault(); toggleDone(item.dataset.entry); }
+  });
+
+  overlay.addEventListener('click', (event) => {
+    const marker = event.target.closest('.marker');
+    if (marker) {
+      event.stopPropagation();
+      selectEntry(marker.dataset.entry, { fromMarker: true });
+    }
+  });
+
+  let drag = null;
+  let dragMoved = false;
+  stage.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0 || event.target.closest('.marker')) return;
+    drag = { x: event.clientX, y: event.clientY, left: stage.scrollLeft, top: stage.scrollTop };
+    dragMoved = false;
+  });
+  window.addEventListener('pointermove', (event) => {
+    if (!drag) return;
+    const dx = event.clientX - drag.x;
+    const dy = event.clientY - drag.y;
+    if (!dragMoved && Math.hypot(dx, dy) < 4) return;
+    dragMoved = true;
+    stage.classList.add('is-dragging');
+    stage.scrollLeft = drag.left - dx;
+    stage.scrollTop = drag.top - dy;
+  });
+  window.addEventListener('pointerup', () => {
+    drag = null;
+    stage.classList.remove('is-dragging');
+  });
+  stage.addEventListener('click', (event) => {
+    if (dragMoved || event.target.closest('.marker')) return;
+    clearSelection();
+  });
+
+  stage.addEventListener('wheel', (event) => {
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    state.fit = false;
+    const factor = Math.exp(-event.deltaY * (event.deltaMode === 1 ? 0.05 : 0.0025));
+    applyZoom(Math.min(4, Math.max(0.25, state.zoom * factor)), { x: event.clientX, y: event.clientY });
+  }, { passive: false });
+
+  $('#shot-prev').addEventListener('click', () => selectShot(state.shot - 1));
+  $('#shot-next').addEventListener('click', () => selectShot(state.shot + 1));
+  $('#zoom-in').addEventListener('click', () => stepZoom(1));
+  $('#zoom-out').addEventListener('click', () => stepZoom(-1));
+  $('#zoom-fit').addEventListener('click', setFit);
+  const actualSize = () => { state.fit = false; applyZoom(1); };
+  $('#zoom-actual').addEventListener('click', actualSize);
+  $('#zoom-value').addEventListener('click', actualSize);
+
+  document.addEventListener('keydown', (event) => {
+    if (event.target.closest('input, textarea, [contenteditable="true"]')) return;
+    const modifier = event.ctrlKey || event.metaKey;
+    if (event.key === '+' || event.key === '=') { event.preventDefault(); stepZoom(1); }
+    else if (event.key === '-' || event.key === '_') { event.preventDefault(); stepZoom(-1); }
+    else if (event.key === '0' && !event.altKey) { event.preventDefault(); setFit(); }
+    else if (event.key === '1' && !modifier) actualSize();
+    else if (event.key === 'Escape') clearSelection();
+    else if (event.key === '[') selectShot(state.shot - 1);
+    else if (event.key === ']') selectShot(state.shot + 1);
+    else if (!modifier && (event.key === 'ArrowDown' || event.key === 'j')) { event.preventDefault(); moveSelection(1); }
+    else if (!modifier && (event.key === 'ArrowUp' || event.key === 'k')) { event.preventDefault(); moveSelection(-1); }
+  });
+
+  new ResizeObserver(() => { if (state.fit) applyZoom(fitZoom()); }).observe(stage);
+
+  render();
+  renderStage();
+})();
+</script>
+</body>
+</html>

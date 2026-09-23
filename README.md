@@ -14,7 +14,8 @@
 - **Layout grid**: a monochrome layout map that highlights content, padding, gaps, and their exact values.
 - **Layers**: a DOM layer tree for the active preview.
 - **Comments**: attach notes to a page or a specific element, linked to a viewport.
-- Hand off accumulated changes by downloading a Markdown report or copying structured context with **Copy for Codex**.
+- Hand off accumulated changes by downloading a Markdown report or copying structured context with **Copy review**.
+- Export a self-contained HTML design review: a page menu, one screenshot per page and viewport with numbered markers, and a comments panel grouped by viewport. Clicking a marker or a comment highlights its element; comments can be checked off as done, and the screenshot can be zoomed. Screenshots are viewport-sized: elements that fit on one screen share a screenshot, and comments further down the page get their own screens. They show the live site without your unsaved CSS edits. Everything is produced locally inside Chrome.
 - Apply CSS changes to a local HTML file through the system file picker.
 - Open the current page with one click from the extension icon or the **Open in PixelPrism** context-menu action.
 
@@ -38,8 +39,10 @@ After changing the code, click the extension's reload button on `chrome://extens
 5. Enable **Layout grid** in a preview card's header to see its spacing and container structure. Use **Layers** (`L`) for DOM navigation.
 6. Add notes with **Comments** (`C`) when needed. They are included in the report with the selected element and viewport size.
 7. Open the handoff menu in the lower-right corner:
-   - **Download .md** saves a Markdown report;
-   - **Copy for Codex** copies a structured set of changes for Codex;
+   - **Agent → Export MD** saves a Markdown report;
+   - **Agent → Copy review** copies a structured set of changes for Codex or another agent;
+   - **Design review → Export PDF** creates one local PDF with contextual screenshots, highlighted targets, comments, and before/after change summaries;
+   - **Design review → Export HTML** downloads one self-contained `.html` file with the screenshots, comments, and before/after CSS changes;
    - the save button in a viewport card is available for local HTML files and writes the generated CSS block to the chosen file.
 
 Keyboard shortcuts: `V` cursor, `I` Inspector, `C` Comments, `L` Layers.
@@ -54,7 +57,7 @@ The first time you save changes, Chrome asks you to select the source `.html` fi
 
 Previews use an `iframe`. Websites that block embedding with `X-Frame-Options` or the `frame-ancestors` CSP directive cannot be opened inside PixelPrism. This is controlled by the website; open the page in a separate tab instead.
 
-Visual CSS edits remain in the studio until you export them, copy them for Codex, or apply them to the selected local HTML file.
+Visual CSS edits remain in the studio until you export them, copy them with **Copy review**, or apply them to the selected local HTML file. Design review generation does not call a backend or external document service.
 
 ## Permissions
 

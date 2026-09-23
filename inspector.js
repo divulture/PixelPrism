@@ -519,6 +519,17 @@
     }
     return parts.join(' > ');
   };
+  // Exact position from <html>; it survives repeated class names that make
+  // domPath ambiguous. Studio overlays are skipped so they do not shift it.
+  const indexPathFor = (element) => {
+    const path = [];
+    for (let current = element; current && current !== document.documentElement; current = current.parentElement) {
+      const parent = current.parentElement;
+      if (!parent) return [];
+      path.unshift([...parent.children].filter((child) => !child.hasAttribute('data-viewport-parade-overlay')).indexOf(current));
+    }
+    return path;
+  };
   const htmlSnippetFor = (element) => {
     const clone = element.cloneNode(true);
     clone.querySelectorAll?.('[data-viewport-parade-overlay], style[data-viewport-parade-overlay]').forEach((node) => node.remove());
@@ -541,6 +552,7 @@
       classes: [...element.classList].filter((name) => !name.startsWith('viewport-parade-')).slice(0, 12),
       selector: stableSelectorFor(element),
       domPath: domPathFor(element),
+      indexPath: indexPathFor(element),
       text: truncate(element.textContent, 240),
       attributes,
       htmlSnippet: htmlSnippetFor(element),
