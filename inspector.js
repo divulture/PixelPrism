@@ -1,5 +1,5 @@
 (() => {
-  const INSPECTOR_PROTOCOL_VERSION = 3;
+  const INSPECTOR_PROTOCOL_VERSION = 6;
   // The content script is registered for web pages so it can run inside Studio's
   // cross-origin preview iframe. Do not create any DOM or listeners on a normal
   // browsing tab: wait until the extension page explicitly enables a tool.
@@ -138,20 +138,68 @@
   });
   let navigationSyncActive = false;
   let inspectorInteractionActive = false;
+  let expectedNavigationUrl = location.href;
+  let lastReportedNavigationUrl = location.href;
+  const syncedNavigationProtocols = new Set(['http:', 'https:', 'file:']);
+  const navigablePreviewUrl = (value) => {
+    try {
+      const url = new URL(value, location.href);
+      return syncedNavigationProtocols.has(url.protocol) ? url.href : '';
+    } catch {
+      return '';
+    }
+  };
+  const sameNavigationUrl = (left, right) => {
+    try {
+      return new URL(left, location.href).href === new URL(right, location.href).href;
+    } catch {
+      return left === right;
+    }
+  };
+  const reportPreviewNavigation = (value = location.href, force = false) => {
+    if (!navigationSyncActive) return;
+    const href = navigablePreviewUrl(value);
+    if (!href || (!force && sameNavigationUrl(href, lastReportedNavigationUrl))) return;
+    lastReportedNavigationUrl = href;
+    window.parent.postMessage({ source: 'viewport-parade', type: 'navigate-preview', url: href }, extensionOrigin);
+  };
   window.addEventListener('message', (event) => {
     if (!isStudioMessage(event, 'enable-navigation-sync')) return;
     navigationSyncActive = true;
+    expectedNavigationUrl = navigablePreviewUrl(event.data.expectedUrl) || location.href;
+    lastReportedNavigationUrl = expectedNavigationUrl;
+    if (!sameNavigationUrl(location.href, expectedNavigationUrl)) reportPreviewNavigation(location.href, true);
   });
+  ['pushState', 'replaceState'].forEach((method) => {
+    try {
+      const original = history[method];
+      history[method] = function viewportParadeHistorySync(...args) {
+        const before = location.href;
+        const result = original.apply(this, args);
+        if (!sameNavigationUrl(location.href, before)) {
+          setTimeout(() => reportPreviewNavigation(location.href), 0);
+        }
+        return result;
+      };
+    } catch {
+      // Some pages lock down browser APIs. Link clicks and load-time URL
+      // checks still keep normal navigation synchronized.
+    }
+  });
+  window.addEventListener('popstate', () => setTimeout(() => reportPreviewNavigation(location.href), 0));
+  window.addEventListener('hashchange', () => setTimeout(() => reportPreviewNavigation(location.href), 0));
   // Navigation is useful even when the visual inspector itself is off.
   document.addEventListener('click', (event) => {
     if (!navigationSyncActive || inspectorInteractionActive || document.documentElement.hasAttribute('data-viewport-parade-inspecting') || event.defaultPrevented || event.button !== 0) return;
     const link = event.target.closest?.('a[href]');
-    if (!link || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    const url = new URL(link.href, location.href);
-    if (!/^https?:$/.test(url.protocol)) return;
+    if (!link || link.hasAttribute('download') || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const target = String(link.getAttribute('target') || '').toLowerCase();
+    if (target && target !== '_self') return;
+    const href = navigablePreviewUrl(link.href);
+    if (!href) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    window.parent.postMessage({ source: 'viewport-parade', type: 'navigate-preview', url: url.href }, extensionOrigin);
+    reportPreviewNavigation(href, true);
   }, true);
   // Shortcuts must work before the visual inspector is installed: I is the
   // first way to leave Cursor mode, so installing this listener lazily would
@@ -222,6 +270,8 @@
   layoutStyle.dataset.viewportParadeOverlay = '';
   document.documentElement.append(layoutStyle);
   const layoutRules = new Map();
+  let authoredStylesheetsPromise;
+  const authoredStylesheets = [];
   const editorModeLabel = { size: 'Size', margin: 'Margin', padding: 'Padding', gap: 'Gaps', component: 'Element', typography: 'Typography' };
   const cssProperty = {
     width: 'width', height: 'height', minWidth: 'min-width', maxWidth: 'max-width', minHeight: 'min-height', maxHeight: 'max-height', marginTop: 'margin-top', marginRight: 'margin-right', marginBottom: 'margin-bottom', marginLeft: 'margin-left',
@@ -238,6 +288,14 @@
     backgroundColor: 'background-color', color: 'color', opacity: 'opacity', borderWidth: 'border-width', borderStyle: 'border-style', borderColor: 'border-color', borderRadius: 'border-radius', boxShadow: 'box-shadow'
   };
   const colorProperties = new Set(['backgroundColor', 'color', 'borderColor']);
+  const authoredGridProperties = new Set(['gridTemplateColumns', 'gridTemplateRows', 'gridAutoColumns', 'gridAutoRows', 'gridAutoFlow', 'gridColumn', 'gridRow']);
+  const lengthPropertyKeys = new Set([
+    'width', 'height', 'minWidth', 'maxWidth', 'minHeight', 'maxHeight',
+    'marginTop', 'marginRight', 'marginBottom', 'marginLeft',
+    'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+    'rowGap', 'columnGap', 'borderWidth', 'borderRadius',
+    'fontSize', 'lineHeight', 'letterSpacing', 'wordSpacing', 'textIndent'
+  ]);
   const cssColorToHex = (value) => {
     const match = value.match(/^rgba?\(\s*([\d.]+)[,\s]+\s*([\d.]+)[,\s]+\s*([\d.]+)(?:\s*[,/]\s*([\d.]+))?\s*\)$/i);
     if (!match) return value;
@@ -274,10 +332,12 @@
       : mode === 'component'
         ? componentSelector
         : layoutSelector;
-    const title = sharedSelector
+    const titleSelector = sharedSelector || selectorFor(element);
+    const title = sharedSelector && selectorMatchesMultiple(sharedSelector)
       ? `${editorModeLabel[mode]} · all ${sharedSelector}`
-      : `${editorModeLabel[mode]} · ${selectorFor(element)}`;
+      : `${editorModeLabel[mode]} · ${titleSelector}`;
     const values = {};
+    const valueSources = {};
     Object.keys(cssProperty).forEach((property) => { values[property] = Math.round(number(styles[property])); });
     // Width and height are meaningful as authored CSS, not just as a rendered
     // pixel rectangle. Keep percentages, viewport units, calc(), variables,
@@ -298,8 +358,29 @@
           ? cssColorToHex(styles[property])
           : styles[property];
     });
+    authoredGridProperties.forEach((property) => {
+      const authored = authoredValueFor(element, componentProperty[property]);
+      if (authored?.declaredValue) {
+        values[property] = authored.declaredValue;
+        valueSources[property] = {
+          kind: 'declared',
+          selector: authored.selector || null,
+          href: authored.href || null,
+          inline: Boolean(authored.inline)
+        };
+      } else {
+        valueSources[property] = { kind: 'computed' };
+      }
+    });
     values.display = styles.display === 'inline-flex' ? 'flex' : styles.display === 'inline-grid' ? 'grid' : styles.display;
-    window.parent.postMessage({ source: 'viewport-parade', type: 'inspector-editor-open', editor: { mode, title, values } }, extensionOrigin);
+    const parentStyles = element.parentElement ? getComputedStyle(element.parentElement) : null;
+    const context = {
+      childElementCount: element.children.length,
+      parentDisplay: parentStyles?.display || '',
+      renderedWidth: Math.round(element.getBoundingClientRect().width),
+      renderedHeight: Math.round(element.getBoundingClientRect().height)
+    };
+    window.parent.postMessage({ source: 'viewport-parade', type: 'inspector-editor-open', editor: { mode, title, values, valueSources, context } }, extensionOrigin);
   };
   const mapBox = (left, top, width, height, style) => {
     if (width < 1 || height < 1) return;
@@ -509,15 +590,14 @@
   const sendLayersTree = () => window.parent.postMessage({
     source: 'viewport-parade', type: 'layers-tree', tree: layerTreeFor()
   }, extensionOrigin);
-  const selectLayerElement = (element) => {
+  const selectLayerElement = async (element, options = {}) => {
     if (!element) return;
-    const visualTarget = element.matches?.('img,picture,video,canvas') ? element : undefined;
     // A selection always exposes the same complete editor. The hover hit test
     // can highlight a spacing zone, but it must never make properties disappear
-    // from the right-hand panel. `componentTargetFor` keeps a click inside an
-    // interactive control scoped to that control; every other HTML element is
-    // editable directly, independent of its tag, class or computed display.
-    const componentTarget = visualTarget || componentTargetFor(element) || element;
+    // from the right-hand panel. Pointer selection skips tiny inline text
+    // wrappers so generated classes such as span.sc-interp do not become broad
+    // "edit all" targets; the Layers panel can still select exact nodes.
+    const componentTarget = options.exact ? element : selectionTargetFor(element);
     pinned = true;
     selectedElement = componentTarget;
     show(selectedElement, 'size');
@@ -527,19 +607,61 @@
     } else {
       typographySelector = undefined;
       componentSelector = typographySelectorFor(componentTarget);
+      await ensureAuthoredStylesheets();
+      if (selectedElement !== componentTarget) return;
       populateEditor(selectedElement, 'component');
     }
     window.parent.postMessage({ source: 'viewport-parade', type: 'layers-selected', path: layerPathFor(selectedElement) }, extensionOrigin);
     window.parent.postMessage({ source: 'viewport-parade', type: 'inspector-element-selected', route: `${location.pathname}${location.search}${location.hash}`, element: elementContextFor(selectedElement) }, extensionOrigin);
   };
-  const componentTargetFor = (element) => {
-    const interactive = element.closest('a,button,summary,input,select,textarea,label,[role="button"],[role="tab"],[role="menuitem"]');
+  const isInlineTextWrapper = (element) => {
+    if (!(element instanceof Element) || element.children.length > 0) return false;
+    if (!['span', 'b', 'strong', 'i', 'em', 'small', 'mark', 'code', 'abbr', 'time'].includes(element.tagName.toLowerCase())) return false;
+    return getComputedStyle(element).display === 'inline' && element.textContent.trim().length > 0;
+  };
+  const selectionTargetFor = (element) => {
+    if (!(element instanceof Element)) return element;
+    const visualTarget = element.closest?.('img,picture,video,canvas');
+    if (visualTarget) return visualTarget;
+    const interactive = element.closest?.('a,button,summary,input,select,textarea,label,[role="button"],[role="tab"],[role="menuitem"]');
     if (interactive) return interactive;
-    // A plain div is an editable CSS element too: it needs access to Display,
-    // sizing, spacing and appearance without being treated as a component.
-    if (element.matches?.('div')) return element;
-    const structural = element.closest('header,nav,main,section,article,aside,form');
-    return structural === element ? structural : undefined;
+    if (!isInlineTextWrapper(element)) return element;
+    for (let current = element.parentElement; current && current !== document.body; current = current.parentElement) {
+      const styles = getComputedStyle(current);
+      if (styles.display !== 'inline') return current;
+    }
+    return element;
+  };
+  const uniqueOrStructuralSelectorFor = (element, preferredSelector) => {
+    try {
+      const preferredMatches = preferredSelector ? document.querySelectorAll(preferredSelector) : [];
+      if (preferredMatches.length === 1 && preferredMatches[0] === element) return preferredSelector;
+    } catch {
+      // Fall through to a structural selector if a class name needs escaping in
+      // an unexpected way.
+    }
+    const parts = [];
+    for (let current = element; current && current !== document.body; current = current.parentElement) {
+      const currentTag = current.tagName.toLowerCase();
+      const siblings = [...current.parentElement.children].filter((sibling) => sibling.tagName === current.tagName);
+      const index = siblings.indexOf(current);
+      parts.unshift(siblings.length > 1 ? `${currentTag}:nth-of-type(${index + 1})` : currentTag);
+      const selector = `body > ${parts.join(' > ')}`;
+      try {
+        const matches = document.querySelectorAll(selector);
+        if (matches.length === 1 && matches[0] === element) return selector;
+      } catch {
+        // Keep walking to a more explicit selector if a page has unusual DOM.
+      }
+    }
+    return `body > ${parts.join(' > ')}`;
+  };
+  const selectorMatchesMultiple = (selector) => {
+    try {
+      return Boolean(selector && document.querySelectorAll(selector).length > 1);
+    } catch {
+      return false;
+    }
   };
   const typographySelectorFor = (element) => {
     const tag = element.tagName.toLowerCase();
@@ -550,20 +672,7 @@
     // shortest structural selector that identifies this exact element instead.
     // Unlike the previous temporary data attribute, this selector can also be
     // written back to the source HTML when the user clicks Apply.
-    const parts = [];
-    for (let current = element; current && current !== document.body; current = current.parentElement) {
-      const currentTag = current.tagName.toLowerCase();
-      const siblings = [...current.parentElement.children].filter((sibling) => sibling.tagName === current.tagName);
-      const index = siblings.indexOf(current);
-      parts.unshift(siblings.length > 1 ? `${currentTag}:nth-of-type(${index + 1})` : currentTag);
-      const selector = `body > ${parts.join(' > ')}`;
-      try {
-        if (document.querySelectorAll(selector).length === 1) return selector;
-      } catch {
-        // Keep walking to a more explicit selector if a page has unusual DOM.
-      }
-    }
-    return `body > ${parts.join(' > ')}`;
+    return uniqueOrStructuralSelectorFor(element);
   };
   const renderTypographyRules = () => {
     typographyStyle.textContent = [...typographyRules].map(([selector, declarations]) => `${selector}{${[...declarations].map(([property, value]) => `${property}:${value} !important`).join(';')}}`).join('\n');
@@ -574,20 +683,82 @@
   const matchingSelector = (element, selectorText) => selectorText.split(',').map((selector) => selector.trim()).find((selector) => {
     try { return selector && element.matches(selector) ? selector : null; } catch { return null; }
   });
+  const canReadRules = (sheet) => {
+    try {
+      void sheet.cssRules;
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const shouldFetchStylesheet = (href) => {
+    if (!href) return false;
+    if (location.protocol === 'file:') return href.startsWith('file://');
+    try {
+      return new URL(href).origin === location.origin;
+    } catch {
+      return false;
+    }
+  };
+  const ensureAuthoredStylesheets = () => {
+    if (authoredStylesheetsPromise) return authoredStylesheetsPromise;
+    const hrefs = [...new Set([...document.styleSheets]
+      .filter((sheet) => !canReadRules(sheet) && shouldFetchStylesheet(sheet.href))
+      .map((sheet) => sheet.href))];
+    authoredStylesheetsPromise = Promise.all(hrefs.map(async (href) => {
+      try {
+        const response = await chrome.runtime.sendMessage({ type: 'load-stylesheet', url: href });
+        if (!response?.ok || typeof response.css !== 'string') return;
+        const sheet = new CSSStyleSheet();
+        sheet.replaceSync(response.css);
+        authoredStylesheets.push({ href, sheet });
+      } catch {
+        // Keep the editor usable with computed values when a stylesheet cannot
+        // be fetched or parsed by the extension.
+      }
+    }));
+    return authoredStylesheetsPromise;
+  };
+  const containerFor = (element) => {
+    for (let current = element.parentElement; current; current = current.parentElement) {
+      const styles = getComputedStyle(current);
+      if (styles.containerType && styles.containerType !== 'normal') return current;
+    }
+    return null;
+  };
+  const containerRuleApplies = (element, conditionText) => {
+    const container = containerFor(element);
+    if (!container) return false;
+    const inlineSize = container.getBoundingClientRect().width;
+    const tests = [...String(conditionText).matchAll(/\(\s*(min|max)-width\s*:\s*([0-9.]+)px\s*\)/gi)];
+    if (!tests.length) return false;
+    return tests.every(([, type, value]) => (
+      type.toLowerCase() === 'max'
+        ? inlineSize <= Number(value)
+        : inlineSize >= Number(value)
+    ));
+  };
   const activeRuleDeclarations = (element, property) => {
     const matches = [];
     let order = 0;
-    const visit = (rules) => {
+    const visit = (rules, hrefOverride = null) => {
       [...rules].forEach((rule) => {
         // Content scripts run in an isolated world where CSSStyleRule and
         // CSSMediaRule constructors are not always exposed. Inspect the rule
         // shape instead, otherwise every readable stylesheet is skipped.
         if (rule.type === 4 && !matchMedia(rule.conditionText).matches) return;
-        if (rule.type !== 1 && rule.cssRules?.length) return visit(rule.cssRules);
+        if (rule.constructor?.name === 'CSSContainerRule' && !containerRuleApplies(element, rule.conditionText)) return;
+        if (rule.type !== 1 && rule.cssRules?.length) return visit(rule.cssRules, hrefOverride);
         if (!rule.selectorText || !rule.style) return;
         const selector = matchingSelector(element, rule.selectorText);
         const declaredValue = rule.style.getPropertyValue(property).trim();
-        if (selector && declaredValue) matches.push({ selector, declaredValue, important: rule.style.getPropertyPriority(property) === 'important', order });
+        if (selector && declaredValue) matches.push({
+          selector,
+          declaredValue,
+          important: rule.style.getPropertyPriority(property) === 'important',
+          order,
+          href: rule.parentStyleSheet?.href || hrefOverride
+        });
         order += 1;
       });
     };
@@ -595,9 +766,17 @@
       // Ignore the temporary PixelPrism override sheets: they show the edit, not
       // the value that existed in the project's source before the edit.
       if (sheet.ownerNode?.dataset?.viewportParadeOverlay !== undefined) return;
-      try { visit(sheet.cssRules); } catch { /* Cross-origin stylesheets are intentionally unavailable. */ }
+      try { visit(sheet.cssRules, sheet.href || null); } catch { /* Cross-origin stylesheets are intentionally unavailable. */ }
     });
+    authoredStylesheets.forEach(({ href, sheet }) => visit(sheet.cssRules, href));
     return matches;
+  };
+  const authoredValueFor = (element, property) => {
+    const inlineValue = element.style?.getPropertyValue(property).trim();
+    if (inlineValue) return { declaredValue: inlineValue, inline: true };
+    const matches = activeRuleDeclarations(element, property);
+    if (!matches.length) return undefined;
+    return matches.sort((left, right) => Number(left.important) - Number(right.important) || left.order - right.order).at(-1);
   };
   const declarationForCustomProperty = (element, variable) => {
     for (let current = element; current; current = current.parentElement) {
@@ -616,8 +795,7 @@
     const inlineValue = element.style?.getPropertyValue(property).trim();
     let declaration = inlineValue ? { declaredValue: inlineValue, inline: true } : null;
     if (!declaration) {
-      const matches = activeRuleDeclarations(element, property);
-      if (matches.length) declaration = matches.sort((left, right) => Number(left.important) - Number(right.important) || left.order - right.order).at(-1);
+      declaration = authoredValueFor(element, property);
     }
     const inheritedProperties = new Set(['color', 'font-family', 'font-size', 'font-weight', 'font-style', 'font-stretch', 'line-height', 'letter-spacing', 'word-spacing', 'text-transform', 'text-align']);
     const inherited = !declaration && inheritedProperties.has(property);
@@ -626,8 +804,7 @@
       const parentInlineValue = parent.style?.getPropertyValue(property).trim();
       declaration = parentInlineValue ? { declaredValue: parentInlineValue, inline: true } : null;
       if (!declaration) {
-        const matches = activeRuleDeclarations(parent, property);
-        if (matches.length) declaration = matches.sort((left, right) => Number(left.important) - Number(right.important) || left.order - right.order).at(-1);
+        declaration = authoredValueFor(parent, property);
       }
     }
     if (!declaration) return undefined;
@@ -665,6 +842,13 @@
     const text = String(value ?? '').trim();
     return text && unit && /^[-+]?\d*\.?\d+$/.test(text) ? `${text}${unit}` : text;
   };
+  const cssValueForInput = (propertyKey, value, unit = 'px') => {
+    const text = String(value ?? '').trim();
+    if (!text) return '';
+    return lengthPropertyKeys.has(propertyKey) && unit && /^[-+]?\d*\.?\d+$/.test(text)
+      ? `${text}${unit}`
+      : text;
+  };
   const inputPreviousValue = (input) => input.dataset.viewportParadePreviousValue ?? input.value;
   const rememberInputValue = (input) => { input.dataset.viewportParadePreviousValue = input.value; };
   const applyTypography = (input) => {
@@ -673,12 +857,13 @@
     const from = inputPreviousValue(input);
     const declarations = typographyRules.get(typographySelector) || new Map();
     const value = input.value.trim();
-    if (value === '') declarations.delete(definition.css);
-    else declarations.set(definition.css, `${value}${definition.unit && /^[-+]?\d*\.?\d+$/.test(value) ? definition.unit : ''}`);
+    const nextValue = cssValueForInput(input.dataset.property, value, definition.unit);
+    if (nextValue === '') declarations.delete(definition.css);
+    else declarations.set(definition.css, nextValue);
     if (declarations.size) typographyRules.set(typographySelector, declarations);
     else typographyRules.delete(typographySelector);
     renderTypographyRules();
-    reportStyleChange({ selector: typographySelector, property: definition.css, from: withUnit(from, definition.unit), to: withUnit(value, definition.unit) });
+    reportStyleChange({ selector: typographySelector, property: definition.css, from: cssValueForInput(input.dataset.property, from, definition.unit), to: nextValue });
     rememberInputValue(input);
   };
   const applyComponent = (input) => {
@@ -689,23 +874,15 @@
     const value = input.value.trim();
     const sourceHint = sourceHintFor(selectedElement, css);
     const componentValue = typographyDefinition
-      ? value ? `${value}${typographyDefinition.unit && /^[-+]?\d*\.?\d+$/.test(value) ? typographyDefinition.unit : ''}` : ''
-      : componentProperty[input.dataset.property]
-      ? ['borderWidth', 'borderRadius'].includes(input.dataset.property) && value ? `${value}px` : value
-      : value ? ['width', 'height', 'minWidth', 'maxWidth', 'minHeight', 'maxHeight'].includes(input.dataset.property)
-        ? (/^[-+]?\d*\.?\d+$/.test(value) ? `${value}px` : value)
-        : `${Number(value)}px` : '';
+      ? cssValueForInput(input.dataset.property, value, typographyDefinition.unit)
+      : cssValueForInput(input.dataset.property, value);
     const declarations = layoutRules.get(componentSelector) || new Map();
     if (componentValue === '') declarations.delete(css);
     else declarations.set(css, componentValue);
     if (declarations.size) layoutRules.set(componentSelector, declarations);
     else layoutRules.delete(componentSelector);
     renderLayoutRules();
-    const fromValue = cssProperty[input.dataset.property]
-      ? withUnit(from, 'px')
-      : ['borderWidth', 'borderRadius'].includes(input.dataset.property)
-        ? withUnit(from, 'px')
-        : from;
+    const fromValue = cssValueForInput(input.dataset.property, from, typographyDefinition?.unit || 'px');
     reportStyleChange({ selector: componentSelector, property: css, from: fromValue, to: componentValue, sourceHint });
     rememberInputValue(input);
   };
@@ -801,11 +978,9 @@
       if (declarations?.size) layoutRules.set(layoutSelector, declarations);
       else layoutRules.delete(layoutSelector);
     } else if (componentProperty[input.dataset.property]) {
-      nextValue = ['borderWidth', 'borderRadius'].includes(input.dataset.property) ? `${value}px` : value;
+      nextValue = cssValueForInput(input.dataset.property, value);
     } else {
-      nextValue = ['width', 'height', 'minWidth', 'maxWidth', 'minHeight', 'maxHeight'].includes(input.dataset.property)
-        ? (/^[-+]?\d*\.?\d+$/.test(value) ? `${value}px` : value)
-        : `${Number(value)}px`;
+      nextValue = cssValueForInput(input.dataset.property, value);
     }
     if (nextValue) {
       const declarations = layoutRules.get(layoutSelector) || new Map();
@@ -813,7 +988,7 @@
       layoutRules.set(layoutSelector, declarations);
     }
     renderLayoutRules();
-    reportStyleChange({ selector: layoutSelector, property, from: cssProperty[input.dataset.property] ? withUnit(from, 'px') : from, to: nextValue });
+    reportStyleChange({ selector: layoutSelector, property, from: cssValueForInput(input.dataset.property, from), to: nextValue });
     show(selectedElement);
     scheduleLayoutMap();
   };
@@ -834,18 +1009,13 @@
     // A subsequent click is a request to edit another zone, not a request to
     // close the editor. This makes it possible to move from content to padding
     // on the same element without toggling the inspector off and on again.
-    // Images should be editable as images, even if they are wrapped by a link.
-    // Links and buttons are components, so their background, borders, radius,
-    // and other visual properties are editable instead of opening Typography.
-    const target = event.target.closest?.('img,picture,video,canvas') || event.target;
-    selectLayerElement(target);
+    selectLayerElement(event.target);
   }, true);
   document.addEventListener('dblclick', (event) => {
     if (!active && !commentPickerActive) return;
-    const target = event.target.closest?.('img,picture,video,canvas') || event.target;
     event.preventDefault();
     event.stopImmediatePropagation();
-    selectLayerElement(target);
+    selectLayerElement(event.target);
   }, true);
   const refreshHoveredElement = () => {
     if ((active || commentPickerActive) && !pinned && pointerInside && hoveredElement) show(hoveredElement);
@@ -899,7 +1069,7 @@
   });
   window.addEventListener('message', (event) => {
     if (!isStudioMessage(event, 'layers-select')) return;
-    selectLayerElement(layerElementFor(event.data.path));
+    selectLayerElement(layerElementFor(event.data.path), { exact: true });
   });
   window.addEventListener('message', (event) => {
     if (!isStudioMessage(event, 'layers-hover')) return;

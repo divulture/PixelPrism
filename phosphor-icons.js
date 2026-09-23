@@ -22,8 +22,13 @@
     'caret-right': 'M181.66,133.66l-80,80a8,8,0,0,1-11.32-11.32L164.69,128,90.34,53.66a8,8,0,0,1,11.32-11.32l80,80A8,8,0,0,1,181.66,133.66Z'
   };
   window.phosphorIcon = (name, className = '') => `<svg class="${className}" aria-hidden="true" viewBox="0 0 256 256"><path d="${paths[name] || ''}"></path></svg>`;
-  document.querySelectorAll('[data-phosphor-icon]').forEach((placeholder) => {
-    const icon = document.createRange().createContextualFragment(window.phosphorIcon(placeholder.dataset.phosphorIcon, placeholder.className)).firstChild;
-    placeholder.replaceWith(icon);
-  });
+  function renderIcons(root) {
+    root.querySelectorAll('[data-phosphor-icon]').forEach((placeholder) => {
+      const icon = document.createRange().createContextualFragment(window.phosphorIcon(placeholder.dataset.phosphorIcon, placeholder.className)).firstChild;
+      placeholder.replaceWith(icon);
+    });
+    // Template contents live in separate fragments and are not traversed above.
+    root.querySelectorAll('template').forEach((template) => renderIcons(template.content));
+  }
+  renderIcons(document);
 })();

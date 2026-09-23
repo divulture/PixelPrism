@@ -98,7 +98,7 @@ const CUSTOM_PRESETS = {
 
 const MIN_VIEWPORT_WIDTH = 320;
 const MIN_VIEWPORT_HEIGHT = 320;
-const INSPECTOR_PROTOCOL_VERSION = 3;
+const INSPECTOR_PROTOCOL_VERSION = 6;
 
 const INSPECTOR_FIELDS = {
   size: [['width', 'W', 'text'], ['height', 'H', 'text'], ['minWidth', 'Min width', 'text'], ['maxWidth', 'Max width', 'text'], ['minHeight', 'Min height', 'text'], ['maxHeight', 'Max height', 'text']],
@@ -125,6 +125,15 @@ const INSPECTOR_FIELDS = {
   typography: [['fontFamily', 'Font family', 'text', true], ['fontStyle', 'Style', 'text'], ['fontSize', 'Size', 'number'], ['fontWeight', 'Weight', 'number'], ['fontStretch', 'Stretch', 'text'], ['lineHeight', 'Line height', 'text'], ['letterSpacing', 'Letter spacing', 'text'], ['wordSpacing', 'Word space', 'text'], ['textTransform', 'Transform', 'text'], ['textDecorationLine', 'Decoration', 'text'], ['textAlign', 'Align', 'text'], ['textIndent', 'Indent', 'number'], ['fontVariationSettings', 'Font variation', 'text', true], ['fontFeatureSettings', 'Font features', 'text', true], ['width', 'W', 'text'], ['height', 'H', 'text'], ['minWidth', 'Min width', 'text'], ['maxWidth', 'Max width', 'text'], ['minHeight', 'Min height', 'text'], ['maxHeight', 'Max height', 'text'], ['marginTop', 'M top', 'number'], ['marginRight', 'M right', 'number'], ['marginBottom', 'M bottom', 'number'], ['marginLeft', 'M left', 'number'], ['paddingTop', 'P top', 'number'], ['paddingRight', 'P right', 'number'], ['paddingBottom', 'P bottom', 'number'], ['paddingLeft', 'P left', 'number']]
 };
 
+const CSS_LENGTH_FIELDS = new Set([
+  'width', 'height', 'minWidth', 'maxWidth', 'minHeight', 'maxHeight',
+  'marginTop', 'marginRight', 'marginBottom', 'marginLeft',
+  'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+  'rowGap', 'columnGap', 'borderWidth', 'borderRadius',
+  'fontSize', 'lineHeight', 'letterSpacing', 'wordSpacing', 'textIndent'
+]);
+const COLOR_FIELDS = new Set(['backgroundColor', 'color', 'borderColor']);
+
 urlInput.value = targetUrl;
 
 
@@ -135,6 +144,30 @@ function fallbackFavicon(url) {
   } catch {
     return '';
   }
+}
+
+function cssColorToHex(value) {
+  const raw = String(value || '').trim();
+  const rgbToHex = (channels) => `#${channels.map((channel) => {
+    const number = Math.max(0, Math.min(255, Math.round(Number(channel))));
+    return number.toString(16).padStart(2, '0');
+  }).join('')}`.toUpperCase();
+  const hex = raw.match(/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i);
+  if (hex) {
+    const digits = hex[1];
+    if (digits.length === 3) return `#${[...digits].map((char) => char + char).join('')}`.toUpperCase();
+    return `#${digits.slice(0, 6)}`.toUpperCase();
+  }
+  const rgb = raw.match(/^rgba?\(\s*([.\d]+)[,\s]+([.\d]+)[,\s]+([.\d]+)/i);
+  if (rgb) return rgbToHex(rgb.slice(1, 4));
+  if (!raw || !CSS.supports('color', raw)) return '';
+  const probe = document.createElement('span');
+  probe.style.color = raw;
+  document.documentElement.append(probe);
+  const computed = getComputedStyle(probe).color;
+  probe.remove();
+  const computedRgb = computed.match(/^rgba?\(\s*([.\d]+)[,\s]+([.\d]+)[,\s]+([.\d]+)/i);
+  return computedRgb ? rgbToHex(computedRgb.slice(1, 4)) : '';
 }
 
 function googleFavicon(url) {
@@ -267,7 +300,7 @@ async function checkFileSchemeAccess() {
 function openPreviewUrl(value, confirmExternal = false) {
   const nextUrl = normalizeUrl(value);
   if (!nextUrl) return;
-  const external = targetUrl && targetUrl !== nextUrl && (new URL(nextUrl).origin !== new URL(targetUrl).origin || isLocalFileUrl(nextUrl));
+  const external = targetUrl && targetUrl !== nextUrl && new URL(nextUrl).origin !== new URL(targetUrl).origin;
   if (confirmExternal && external && !window.confirm(`Open ${displayAddress(nextUrl)} in every viewport?\n\nLocal inspector changes will be reset.`)) return;
   if (targetUrl !== nextUrl) localFileHandle = undefined;
   targetUrl = nextUrl;
@@ -811,6 +844,15 @@ function updateCardDimensions(card, device, width, height, scale) {
   if (heightCallout) heightCallout.textContent = `${height}px height`;
 }
 
+function enableNavigationSync(card) {
+  const iframe = card.querySelector('iframe');
+  iframe?.contentWindow?.postMessage({
+    source: 'viewport-parade',
+    type: 'enable-navigation-sync',
+    expectedUrl: card.dataset.loadedUrl || targetUrl
+  }, '*');
+}
+
 function promoteResizedCard(card, { deviceId, restoreWidth, restoreHeight }) {
   const width = Number(card.dataset.viewportWidth);
   const height = Number(card.dataset.viewportHeight);
@@ -1179,6 +1221,22 @@ function showInspectorPanel(editor, source) {
     panelGroups.push(currentGroup);
     return fields;
   };
+  const layoutNoteFor = () => {
+    const context = editor.context || {};
+    const values = editor.values || {};
+    const notes = [];
+    const isFlex = values.display === 'flex';
+    if (isFlex && values.width === 'auto' && values.height === 'auto') {
+      notes.push('Flex is active, but this element is auto-sized, so alignment has little free space to move children.');
+    }
+    if (String(context.parentDisplay || '').includes('grid')) {
+      notes.push('This element is positioned by its parent grid; use Column placement / Row placement or edit the parent grid to move it.');
+    }
+    if (isFlex && Number(context.childElementCount) < 2) {
+      notes.push('Flex controls are most visible when the selected element has multiple child elements.');
+    }
+    return notes.join(' ');
+  };
   fields.forEach(([property, label, type, wide, layoutFor, options]) => {
     const groupStarts = {
       display: ['Layout'],
@@ -1190,12 +1248,22 @@ function showInspectorPanel(editor, source) {
     };
     const groupStart = groupStarts[property];
     const groupFields = groupStart ? startGroup(...groupStart) : currentGroup?.querySelector('.inspector-group-fields');
+    if (groupStart?.[0] === 'Layout') {
+      const note = layoutNoteFor();
+      if (note) {
+        const noteNode = document.createElement('p');
+        noteNode.className = 'inspector-note';
+        noteNode.textContent = note;
+        currentGroup.insertBefore(noteNode, groupFields);
+      }
+    }
     if (!groupFields) return;
     const field = document.createElement('label');
     field.className = `inspector-field${wide ? ' is-wide' : ''}`;
     if (layoutFor) field.dataset.layoutFor = layoutFor;
     const isDimension = property === 'width' || property === 'height';
     const isTypography = editorMode === 'typography';
+    const isColorField = COLOR_FIELDS.has(property);
     const compactTypeControl = isTypography && ['fontStyle', 'fontSize'].includes(property);
     const edgePrefix = ({ marginTop: 'Top', marginRight: 'Right', marginBottom: 'Bottom', marginLeft: 'Left', paddingTop: 'Top', paddingRight: 'Right', paddingBottom: 'Bottom', paddingLeft: 'Left' })[property];
     const gapPrefix = ({ rowGap: 'Row', columnGap: 'Col' })[property];
@@ -1203,6 +1271,7 @@ function showInspectorPanel(editor, source) {
     if (isDimension) field.classList.add('is-dimension');
     if (edgePrefix) field.classList.add('is-box-edge');
     if (gapPrefix) field.classList.add('is-gap');
+    if (isColorField) field.classList.add('is-color');
     if (isTypography) field.classList.add(`is-type-${property}`);
     if (!isDimension && !compactTypeControl && !edgePrefix && !gapPrefix) field.textContent = label;
     if (compactTypeControl || isDimension || edgePrefix || gapPrefix) {
@@ -1212,7 +1281,10 @@ function showInspectorPanel(editor, source) {
       field.append(accessibleLabel);
     }
     const input = type === 'select' ? document.createElement('select') : document.createElement('input');
-    if (type !== 'select') input.type = type;
+    if (type !== 'select') {
+      input.type = CSS_LENGTH_FIELDS.has(property) ? 'text' : type;
+      if (CSS_LENGTH_FIELDS.has(property)) input.inputMode = 'decimal';
+    }
     input.name = property;
     input.dataset.property = property;
     // A preview can retain an older injected inspector script until its page is
@@ -1228,6 +1300,46 @@ function showInspectorPanel(editor, source) {
       input.value = currentValue;
     }
     input.dataset.previousValue = input.value;
+    let colorPicker;
+    if (input instanceof HTMLInputElement) {
+      input.addEventListener('pointerdown', () => {
+        input.dataset.selectOnFocus = String(document.activeElement !== input);
+      });
+      input.addEventListener('pointerup', () => {
+        if (input.dataset.selectOnFocus !== 'true' || document.activeElement !== input) return;
+        delete input.dataset.selectOnFocus;
+        input.select();
+      });
+      input.addEventListener('focus', () => {
+        if (input.dataset.selectOnFocus === 'false') return;
+        requestAnimationFrame(() => {
+          if (document.activeElement === input) input.select();
+        });
+      });
+      input.addEventListener('blur', () => {
+        delete input.dataset.selectOnFocus;
+      });
+      if (isColorField) {
+        colorPicker = document.createElement('input');
+        colorPicker.type = 'color';
+        colorPicker.className = 'inspector-color-picker';
+        colorPicker.value = cssColorToHex(currentValue) || '#000000';
+        colorPicker.setAttribute('aria-label', `${label} picker`);
+        colorPicker.dataset.colorPickerFor = property;
+        colorPicker.addEventListener('input', () => {
+          input.value = colorPicker.value.toUpperCase();
+          input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+        });
+        colorPicker.addEventListener('change', () => {
+          input.value = colorPicker.value.toUpperCase();
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+        input.addEventListener('input', () => {
+          const nextColor = cssColorToHex(input.value);
+          if (nextColor) colorPicker.value = nextColor;
+        });
+      }
+    }
     if (isDimension || inlinePrefix) {
       const shell = document.createElement('span');
       shell.className = 'inspector-input-shell';
@@ -1237,8 +1349,20 @@ function showInspectorPanel(editor, source) {
       prefix.textContent = isDimension ? (property === 'width' ? 'W' : 'H') : inlinePrefix;
       shell.append(prefix, input);
       field.append(shell);
+    } else if (colorPicker) {
+      const shell = document.createElement('span');
+      shell.className = 'inspector-color-shell';
+      shell.append(input, colorPicker);
+      field.append(shell);
     } else {
       field.append(input);
+    }
+    const source = editor.valueSources?.[property];
+    if (source?.kind === 'declared' && ['gridTemplateColumns', 'gridTemplateRows', 'gridAutoColumns', 'gridAutoRows', 'gridAutoFlow', 'gridColumn', 'gridRow'].includes(property)) {
+      const sourceNode = document.createElement('span');
+      sourceNode.className = `inspector-source is-${source.kind}`;
+      sourceNode.textContent = `declared${source.selector ? ` · ${source.selector}` : ''}`;
+      field.append(sourceNode);
     }
     groupFields.append(field);
   });
@@ -1286,7 +1410,7 @@ function createViewportCard(device, width, scale) {
     iframe.src = targetUrl;
     waitForLocalPreview(card);
     iframe.addEventListener('load', () => {
-      iframe.contentWindow?.postMessage({ source: 'viewport-parade', type: 'enable-navigation-sync' }, '*');
+      enableNavigationSync(card);
     });
     iframe.addEventListener('pointerenter', () => {
       setLayersFrame(iframe.contentWindow);
@@ -1429,6 +1553,7 @@ window.addEventListener('message', (event) => {
   if (inspectorModeActive) {
     event.source.postMessage({ source: 'viewport-parade', type: 'toggle-inspector', enabled: true }, '*');
   }
+  enableNavigationSync(card);
   if (!layersFrame) setLayersFrame(event.source);
   if (!commentsPanel.hidden) setCommentPicker(true);
   reconcilePendingChanges(card);
@@ -1531,12 +1656,14 @@ window.addEventListener('message', (event) => {
 function sendInspectorFieldChange(event) {
   const input = event.target.closest('input[data-property], select[data-property]');
   if (!input || !inspectorFrame?.contentWindow) return;
+  const previousValue = input.dataset.previousValue ?? '';
+  if (event.type === 'change' && input.value === previousValue) return;
   inspectorFrame.contentWindow.postMessage({
     source: 'viewport-parade',
     type: 'inspector-editor-input',
     property: input.dataset.property,
     value: input.value,
-    previousValue: input.dataset.previousValue ?? ''
+    previousValue
   }, '*');
   input.dataset.previousValue = input.value;
   if (input.dataset.property === 'display') updateLayoutFieldVisibility();

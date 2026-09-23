@@ -50,6 +50,46 @@ function waitForTabLoad(tabId, timeout = 12000) {
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+async function stylesheetTextFromDebugger(tabId, url) {
+  const debuggee = { tabId };
+  const headers = [];
+  const sameStylesheet = (sourceUrl) => {
+    if (!sourceUrl) return false;
+    if (sourceUrl === url) return true;
+    try {
+      const left = new URL(sourceUrl);
+      const right = new URL(url);
+      left.hash = '';
+      right.hash = '';
+      return left.href === right.href || (left.search = '', right.search = '', left.href === right.href);
+    } catch {
+      return sourceUrl.split('?')[0] === url.split('?')[0];
+    }
+  };
+  const onEvent = (source, method, params) => {
+    if (source.tabId === tabId && method === 'CSS.styleSheetAdded' && params?.header) {
+      headers.push(params.header);
+    }
+  };
+  chrome.debugger.onEvent.addListener(onEvent);
+  try {
+    await chrome.debugger.attach(debuggee, '1.3');
+    await chrome.debugger.sendCommand(debuggee, 'DOM.enable').catch(() => {});
+    await chrome.debugger.sendCommand(debuggee, 'CSS.enable');
+    await pause(120);
+    const header = headers.find((candidate) => sameStylesheet(candidate.sourceURL));
+    if (!header?.styleSheetId) throw new Error('Stylesheet was not reported by DevTools.');
+    const result = await chrome.debugger.sendCommand(debuggee, 'CSS.getStyleSheetText', {
+      styleSheetId: header.styleSheetId
+    });
+    if (typeof result?.text !== 'string') throw new Error('DevTools did not return stylesheet text.');
+    return result.text;
+  } finally {
+    chrome.debugger.onEvent.removeListener(onEvent);
+    await chrome.debugger.detach(debuggee).catch(() => {});
+  }
+}
+
 async function waitForCaptureReady(debuggee) {
   // A load event does not mean the page is visually settled: fonts, image
   // decoding and entrance transitions can still be in progress.
@@ -109,6 +149,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === 'file-scheme-access') {
     chrome.extension.isAllowedFileSchemeAccess()
       .then((allowed) => sendResponse({ ok: true, allowed }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+  if (message?.type === 'load-stylesheet') {
+    const url = typeof message.url === 'string' ? message.url : '';
+    if (!/^(?:https?|file):\/\//.test(url)) {
+      sendResponse({ ok: false, error: 'Unsupported stylesheet URL.' });
+      return;
+    }
+    const tabId = sender.tab?.id;
+    fetch(url)
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.text();
+      })
+      .catch((error) => {
+        if (!Number.isInteger(tabId)) throw error;
+        return stylesheetTextFromDebugger(tabId, url);
+      })
+      .then((css) => sendResponse({ ok: true, css }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }
