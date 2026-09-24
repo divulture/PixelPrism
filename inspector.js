@@ -1,5 +1,5 @@
 (() => {
-  const INSPECTOR_PROTOCOL_VERSION = 6;
+  const INSPECTOR_PROTOCOL_VERSION = 7;
   // The content script is registered for web pages so it can run inside Studio's
   // cross-origin preview iframe. Do not create any DOM or listeners on a normal
   // browsing tab: wait until the extension page explicitly enables a tool.
@@ -170,22 +170,10 @@
     lastReportedNavigationUrl = expectedNavigationUrl;
     if (!sameNavigationUrl(location.href, expectedNavigationUrl)) reportPreviewNavigation(location.href, true);
   });
-  ['pushState', 'replaceState'].forEach((method) => {
-    try {
-      const original = history[method];
-      history[method] = function viewportParadeHistorySync(...args) {
-        const before = location.href;
-        const result = original.apply(this, args);
-        if (!sameNavigationUrl(location.href, before)) {
-          setTimeout(() => reportPreviewNavigation(location.href), 0);
-        }
-        return result;
-      };
-    } catch {
-      // Some pages lock down browser APIs. Link clicks and load-time URL
-      // checks still keep normal navigation synchronized.
-    }
-  });
+  // Router calls to history.pushState run in the page's world, where a patch
+  // made from this isolated content script is invisible. Navigation API
+  // events are shared by both worlds, so SPA route changes are reported too.
+  window.navigation?.addEventListener('currententrychange', () => setTimeout(() => reportPreviewNavigation(location.href), 0));
   window.addEventListener('popstate', () => setTimeout(() => reportPreviewNavigation(location.href), 0));
   window.addEventListener('hashchange', () => setTimeout(() => reportPreviewNavigation(location.href), 0));
   // Navigation is useful even when the visual inspector itself is off.

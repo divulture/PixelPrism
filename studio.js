@@ -100,7 +100,7 @@ const CUSTOM_PRESETS = {
 
 const MIN_VIEWPORT_WIDTH = 320;
 const MIN_VIEWPORT_HEIGHT = 320;
-const INSPECTOR_PROTOCOL_VERSION = 6;
+const INSPECTOR_PROTOCOL_VERSION = 7;
 
 const INSPECTOR_FIELDS = {
   size: [['width', 'W', 'text'], ['height', 'H', 'text'], ['minWidth', 'Min width', 'text'], ['maxWidth', 'Max width', 'text'], ['minHeight', 'Min height', 'text'], ['maxHeight', 'Max height', 'text']],

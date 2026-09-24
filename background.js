@@ -422,6 +422,34 @@ async function waitForReviewCaptureReady(debuggee) {
   await pause(160);
 }
 
+// Single-page apps fire the load event long before they render (auth checks,
+// API calls), so reviewed elements can appear seconds later. Wait until every
+// recorded element is present, or until the found set stops growing.
+async function waitForReviewTargets(debuggee, targets, changes = [], timeout = 8000) {
+  const lookups = [
+    ...targets.map(({ id, target }) => ({ id, target })),
+    ...changes.map((change, index) => ({ id: `change:${index}`, target: change }))
+  ].filter(({ target }) => target);
+  if (!lookups.length) return;
+  const deadline = Date.now() + timeout;
+  let lastFound = -1;
+  let stableSince = Date.now();
+  while (Date.now() < deadline) {
+    const measurement = await measureReviewTargets(debuggee, lookups).catch(() => null);
+    const found = measurement ? measurement.rects.filter((rect) => rect.found).length : 0;
+    if (found === lookups.length) return;
+    if (found !== lastFound) {
+      lastFound = found;
+      stableSince = Date.now();
+    } else if (found > 0 && Date.now() - stableSince >= 1200) {
+      // Some elements are gone for good (edited page, other route); the
+      // rest have rendered, so do not wait for the full timeout.
+      return;
+    }
+    await pause(250);
+  }
+}
+
 async function captureReviewContext({ url, width, height, changes, targets = [], returnWindowId }) {
   const viewportWidth = Math.max(1, Math.round(width));
   const viewportHeight = Math.max(1, Math.round(height));
@@ -440,6 +468,7 @@ async function captureReviewContext({ url, width, height, changes, targets = [],
     });
     await navigateDebuggerPage(debuggee, url);
     await waitForReviewCaptureReady(debuggee);
+    await waitForReviewTargets(debuggee, targets, changes);
     const identity = await reviewIdentityFor(debuggee, url).catch(() => ({ name: '', logoDataUrl: '' }));
     const changesApplied = await reviewDebuggerCommand(debuggee, 'Runtime.evaluate', {
       expression: reviewPreparationExpression({ changes, target: null, marker: null }),
@@ -665,6 +694,7 @@ async function captureReviewPage({ url, width, height, changes, targets = [], re
     });
     await navigateDebuggerPage(debuggee, url);
     await waitForReviewCaptureReady(debuggee);
+    await waitForReviewTargets(debuggee, targets, changes);
     const identity = await reviewIdentityFor(debuggee, url).catch(() => ({ name: '', logoDataUrl: '' }));
     const changesApplied = await reviewDebuggerCommand(debuggee, 'Runtime.evaluate', {
       expression: reviewPreparationExpression({ changes, target: null, marker: null }),
