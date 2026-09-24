@@ -59,17 +59,15 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
 .panel-header p { margin: 4px 0 0; overflow: hidden; color: var(--muted); font-size: 11px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .panel-body { flex: 1; min-height: 0; overflow: auto; padding: 0 12px 12px; }
 
-.pages-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
-.page-item { display: grid; gap: 2px; width: 100%; padding: 8px; border: 0; border-radius: 4px; background: var(--soft); text-align: left; }
-.page-item:hover { background: var(--hover); }
-.page-item[aria-current="true"] { background: var(--ink); color: #fff; }
-.page-item-title { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.page-item-name { flex: 1; min-width: 0; overflow: hidden; font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
-.page-item-count { flex: none; margin-left: auto; text-align: right; color: var(--muted); font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.page-item[aria-current="true"] .page-item-count, .page-item[aria-current="true"] small { color: #d4d4d8; }
-.page-item small { display: block; overflow: hidden; color: var(--muted); font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.pages-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.page-item { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 24px; padding: 0 6px; border: 0; border-radius: 4px; background: transparent; text-align: left; font: 700 11px/1.2 Inter, sans-serif; }
+.page-item:hover, .page-item[aria-current="true"] { background: var(--hover); }
+.page-item-icon { display: grid; flex: none; place-items: center; color: var(--faint); }
+.page-item-icon svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
+.page-item:hover .page-item-icon, .page-item[aria-current="true"] .page-item-icon { color: var(--ink); }
+.page-item-name { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--text); text-overflow: ellipsis; white-space: nowrap; }
+.page-item-count { flex: none; color: var(--muted); font-size: 10px; font-weight: 400; font-variant-numeric: tabular-nums; }
 .page-item.is-complete .page-item-count { color: var(--done); }
-.page-item[aria-current="true"].is-complete .page-item-count { color: #86efac; }
 
 .stage-wrap { position: relative; display: grid; grid-template-rows: 44px minmax(0, 1fr); min-width: 0; min-height: 0; background: var(--stage); }
 .place-hint { position: absolute; top: 56px; left: 50%; z-index: 5; display: flex; align-items: center; gap: 10px; max-width: calc(100% - 24px); padding: 6px 6px 6px 12px; border-radius: 6px; background: var(--ink); color: #fff; box-shadow: 0 6px 20px rgba(24, 24, 27, .25); font-size: 11px; font-weight: 600; transform: translateX(-50%); }
@@ -111,37 +109,46 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
 .stage-empty strong { display: block; margin-bottom: 4px; color: var(--ink); font-weight: 700; }
 
 .vp-group + .vp-group { margin-top: 12px; }
-.vp-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; margin: 0 0 4px; padding: 6px 8px; border: 0; border-radius: 4px; background: transparent; text-align: left; }
-.vp-header:hover { background: var(--hover); }
-.vp-header strong { font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.vp-header span { color: var(--muted); font-size: 10px; font-weight: 600; }
-.vp-group.is-active .vp-header { background: var(--hover); box-shadow: inset 2px 0 0 var(--ink); }
-.comments-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
-.comment-item { position: relative; display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; padding: 8px 36px 8px 8px; border-radius: 4px; background: var(--soft); cursor: pointer; transition: background 120ms ease, box-shadow 120ms ease; }
+.vp-header { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 24px; margin: 0 0 4px; padding: 0 6px; border: 0; border-radius: 4px; background: transparent; color: var(--text); text-align: left; font: 700 11px/1.2 Inter, sans-serif; }
+.vp-header:hover, .vp-group.is-active .vp-header { background: var(--hover); }
+.vp-size { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
+.vp-count { margin-left: auto; color: var(--muted); font-size: 10px; font-weight: 400; font-variant-numeric: tabular-nums; }
+.comments-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.comment-item { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; min-width: 0; padding: 4px 8px; border-radius: 4px; background: #fff; cursor: pointer; transition: background 120ms ease; }
 .comment-item:hover { background: var(--hover); }
-.comment-item.is-selected { background: var(--accent-soft); box-shadow: inset 0 0 0 1px rgba(239, 68, 68, .45); }
-.comment-number { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.comment-item.is-page .comment-number { background: var(--ink); }
-.comment-item.is-missing .comment-number { background: #fff; color: var(--muted); box-shadow: inset 0 0 0 1.5px var(--faint); }
-.comment-body { min-width: 0; }
-.comment-body p { margin: 0; overflow-wrap: anywhere; color: var(--text); font-size: 12px; font-weight: 500; white-space: pre-wrap; }
-.comment-body code { padding: 0 3px; border-radius: 3px; background: rgba(24, 24, 27, .06); font: 600 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
-.comment-body small { display: block; margin-top: 2px; overflow: hidden; color: var(--muted); font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.comment-kind { display: inline-block; margin-bottom: 2px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; }
-.comment-item.is-done .comment-number { background: var(--faint); box-shadow: none; color: #fff; }
-.comment-item.is-done .comment-body p, .comment-item.is-done .comment-body small, .comment-item.is-done .comment-kind { color: var(--faint); text-decoration: line-through; }
-.comment-item.is-done .comment-body code { background: transparent; }
-.comment-check { position: absolute; top: 7px; right: 7px; display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--muted); }
+.comment-item.is-selected { background: var(--hover); }
+.comment-item p { display: -webkit-box; margin: 0; overflow: hidden; overflow-wrap: anywhere; color: var(--text); font-size: 12px; font-weight: 500; line-height: 18px; white-space: pre-wrap; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+.comment-item.is-text-expanded p { display: block; overflow: visible; -webkit-line-clamp: unset; }
+.comment-item p code { padding: 0 3px; border-radius: 3px; background: rgba(24, 24, 27, .06); font: 600 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.comment-kind { display: block; margin-bottom: 2px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; }
+.comment-meta { display: flex; align-items: center; gap: 4px; min-height: 18px; color: var(--muted); font: 400 11px/1.2 Inter, sans-serif; }
+.comment-number { flex: none; margin-inline-end: 2px; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.comment-item.is-selected .comment-number { color: var(--accent); }
+.comment-target { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.comment-state { flex: none; color: var(--muted); white-space: nowrap; }
+.comment-item.is-done .comment-number { color: var(--faint); }
+.comment-item.is-done p, .comment-item.is-done .comment-target, .comment-item.is-done .comment-state, .comment-item.is-done .comment-kind { color: var(--faint); text-decoration: line-through; }
+.comment-item.is-done p code { background: transparent; }
+.comment-controls { display: flex; flex: none; align-items: center; gap: 2px; margin: -3px 0 -3px auto; }
+.comment-check { flex: none; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--muted); }
+.comment-more { flex: none; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--muted); }
+.comment-more-wrap { position: relative; display: flex; }
+.comment-more svg { width: 18px; height: 18px; fill: currentColor; }
+.comment-more:hover, .comment-more[aria-expanded="true"] { background: rgba(24, 24, 27, .06); color: var(--ink); }
+/* Checkbox and menu stay out of the way until the card is hovered or selected. */
+.comment-check, .comment-more { opacity: 0; transition: opacity 120ms ease, background 120ms ease; }
+.comment-item:hover :is(.comment-check, .comment-more), .comment-item.is-selected :is(.comment-check, .comment-more), .comment-more[aria-expanded="true"], :is(.comment-check, .comment-more):focus-visible { opacity: 1; }
+.comment-menu { position: absolute; z-index: 3; top: calc(100% + 6px); right: 0; display: grid; min-width: 110px; padding: 4px; border: 1px solid var(--line); border-radius: 6px; background: #fff; box-shadow: 0 8px 18px rgba(24, 24, 27, .14); cursor: default; }
+.comment-menu.is-up { top: auto; bottom: calc(100% + 6px); }
+.comment-menu button { display: flex; align-items: center; min-height: 28px; padding: 0 8px; border: 0; border-radius: 4px; background: transparent; color: #3f3f46; font: 650 11px/1 Inter, sans-serif; text-align: left; white-space: nowrap; }
+.comment-menu button:hover, .comment-menu button:focus-visible { background: var(--hover); color: var(--ink); }
+.comment-menu button.is-danger { color: var(--accent-ink); }
+.comment-menu button.is-danger:hover, .comment-menu button.is-danger:focus-visible { background: #fee2e2; color: #991b1b; }
 .comment-check:hover { background: rgba(24, 24, 27, .06); color: var(--ink); }
 .comment-check i { display: grid; place-items: center; width: 16px; height: 16px; border: 1.5px solid #a1a1aa; border-radius: 4px; background: #fff; }
 .comment-check svg { width: 12px; height: 12px; fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; opacity: 0; }
 .comment-check[aria-checked="true"] i { border-color: var(--done); background: var(--done); }
 .comment-check[aria-checked="true"] svg { opacity: 1; }
-.comment-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
-.comment-action { height: 24px; padding: 0 8px; border: 1px solid var(--line); border-radius: 4px; background: #fff; color: var(--ink); font-size: 11px; font-weight: 700; }
-.comment-action:hover { background: var(--hover); }
-.comment-action.is-primary { border-color: var(--ink); background: var(--ink); color: #fff; }
-.comment-action.is-primary:hover { background: #3f3f46; }
 .empty-note { margin: 4px 0 0; color: var(--muted); font-size: 11px; font-weight: 500; }
 .footer-note { padding: 10px 12px; border-top: 1px solid var(--line); color: var(--faint); font-size: 10px; font-weight: 600; }
 
@@ -195,7 +202,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
       </div>
     </main>
     <aside class="panel comments-panel" aria-labelledby="comments-title">
-      <header class="panel-header"><div><h2 id="comments-title">Comments</h2><p id="comments-meta"></p></div><span class="panel-count" id="comments-count" title="Resolved comments"></span></header>
+      <header class="panel-header"><div><h2 id="comments-title">Comments</h2></div><span class="panel-count" id="comments-count" title="Resolved comments"></span></header>
       <div class="panel-body" id="comments-groups"></div>
       <div class="footer-note" id="footer-note">Powered by PixelPrism</div>
     </aside>
@@ -212,9 +219,11 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
   const ZOOM_STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4];
   const STORAGE_KEY = `pixelprism-review:${data.id}`;
   const PINS_KEY = `pixelprism-review-pins:${data.id}`;
+  const DELETED_KEY = `pixelprism-review-deleted:${data.id}`;
   const CHECK_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg>';
+  const DOTS_ICON = '<svg viewBox="0 0 256 256" aria-hidden="true"><path d="M140,128a12,12,0,1,1-12-12A12,12,0,0,1,140,128Zm56-12a12,12,0,1,0,12,12A12,12,0,0,0,196,116ZM60,116a12,12,0,1,0,12,12A12,12,0,0,0,60,116Z"/></svg>';
 
-  const state = { page: 0, viewport: 0, shot: 0, selected: null, placing: null, zoom: 1, fit: true, done: new Set(), unsaved: false };
+  const state = { page: 0, viewport: 0, shot: 0, selected: null, expanded: null, menu: null, placing: null, zoom: 1, fit: true, done: new Set(), unsaved: false };
   // Checkmarks and points not yet written into the file live in
   // localStorage; once the file is saved, the file is the source of truth.
   const resolvedKey = (ids) => JSON.stringify([...ids].sort());
@@ -245,6 +254,24 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     if (text !== undefined) node.textContent = text;
     return node;
   };
+  // Same breakpoints and glyphs PixelPrism's studio uses for its viewport icons.
+  const DEVICE_ICONS = {
+    phone: '<rect width="14" height="20" x="5" y="2" rx="2" ry="2"></rect><path d="M12 18h.01"></path>',
+    'phone-wide': '<g transform="rotate(90 12 12)"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"></rect><path d="M12 18h.01"></path></g>',
+    tablet: '<rect width="16" height="20" x="4" y="2" rx="2" ry="2"></rect><path d="M12 18h.01"></path>',
+    laptop: '<path d="M20 16V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v10"></path><path d="M2 16h20"></path><path d="M6 20h12"></path>',
+    desktop: '<rect width="20" height="14" x="2" y="3" rx="2"></rect><path d="M8 21h8"></path><path d="M12 17v4"></path>'
+  };
+  function deviceGlyph(width) {
+    if (width <= 450) return 'phone';
+    if (width <= 620) return 'phone-wide';
+    if (width <= 900) return 'tablet';
+    if (width <= 1200) return 'laptop';
+    return 'desktop';
+  }
+  function deviceIconSvg(width) {
+    return `<svg viewBox="0 0 24 24" aria-hidden="true">${DEVICE_ICONS[deviceGlyph(width)]}</svg>`;
+  }
   const pageEntries = (page) => page.viewports.flatMap((viewport) => viewport.entries);
   const currentPage = () => data.pages[state.page];
   const currentViewport = () => currentPage().viewports[state.viewport];
@@ -260,10 +287,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
   // A page captured in one of its tabs is named after it: 1440 × 900 · Active.
   const viewportLabel = (viewport) => `${viewport.width} × ${viewport.height}${viewport.state ? ` · ${viewport.state}` : ''}`;
   const currentShot = () => currentViewport().shots[state.shot] || null;
-  const captureLabel = (viewport) => {
-    if (!viewport.shots.length) return 'No screenshot';
-    return viewport.shots.length === 1 ? '1 screen' : `${viewport.shots.length} screens`;
-  };
 
   // Manual points. The automatic placement is kept in entry.auto so a point
   // can be undone; entry.pin is in page coordinates so the studio can put it
@@ -308,6 +331,26 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     else removePin(found.entry);
     if (placementKey(found.entry) !== before) state.unsaved = true;
   });
+  // Comments deleted here but not yet written into the file.
+  let deletedDraft = [];
+  try {
+    const stored = JSON.parse(localStorage.getItem(DELETED_KEY) || '[]');
+    if (Array.isArray(stored)) deletedDraft = stored;
+  } catch { /* See above. */ }
+  const saveDeletedDraft = () => {
+    try { localStorage.setItem(DELETED_KEY, JSON.stringify(deletedDraft)); } catch { /* See above. */ }
+  };
+  function dropEntry(id) {
+    const found = findEntry(id);
+    if (!found) return false;
+    const viewport = data.pages[found.pageIndex].viewports[found.viewportIndex];
+    viewport.entries = viewport.entries.filter((entry) => entry.id !== id);
+    return true;
+  }
+  deletedDraft.forEach((id) => {
+    if (dropEntry(id)) state.unsaved = true;
+    state.done.delete(id);
+  });
 
   // Header
   const logo = $('#brand-logo');
@@ -341,10 +384,10 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
       button.dataset.page = String(index);
       button.setAttribute('aria-current', String(index === state.page));
       button.classList.toggle('is-complete', entries.length > 0 && done === entries.length);
-      const title = el('div', 'page-item-title');
-      title.append(el('span', 'page-item-name', page.label), el('span', 'page-item-count', `${done}/${entries.length}`));
       button.title = page.url;
-      button.append(title, el('small', '', page.viewports.map(viewportLabel).join(' · ')));
+      const icon = el('span', 'page-item-icon');
+      icon.innerHTML = deviceIconSvg(page.viewports[0]?.width || 0);
+      button.append(icon, el('span', 'page-item-name', page.label), el('span', 'page-item-count', `${done}/${entries.length}`));
       item.append(button);
       return item;
     }));
@@ -361,18 +404,18 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     paragraph.append(property, ': ', from, ' → ', to);
   }
 
-  function entryMeta(entry) {
+  function entryTarget(entry) {
     if (entry.target === 'page') return 'Whole page';
     if (entry.target === 'pin') return 'Point placed by hand';
-    const selector = entry.selector || 'Element';
-    if (entry.target === 'missing') return `${selector} · not found on the captured page`;
-    if (entry.target === 'hidden') return `${selector} · not visible on the captured page`;
-    return selector;
+    return entry.selector || 'Element';
   }
 
-  function placeLabel(entry) {
-    return entry.target === 'pin' ? 'Move point' : 'Place on screenshot';
+  function entryState(entry) {
+    if (entry.target === 'missing') return 'Not found';
+    if (entry.target === 'hidden') return 'Hidden';
+    return '';
   }
+
 
   function renderSave() {
     const button = $('#save-file');
@@ -384,7 +427,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     else if (status === 'saved') label.textContent = 'Saved';
     else if (status === 'unsupported') label.textContent = 'Kept in this browser';
     else if (status === 'error') label.textContent = 'Save failed · Retry';
-    else label.textContent = 'Save to file';
+    else label.textContent = 'Save';
     button.title = ({
       unsupported: 'Saving into the file needs Chrome or Edge. Changes stay in this browser.',
       error: save.error || 'The file could not be written.',
@@ -396,7 +439,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     const page = currentPage();
     const entries = pageEntries(page);
     const done = entries.filter((entry) => state.done.has(entry.id)).length;
-    $('#comments-meta').textContent = page.label;
     const count = $('#comments-count');
     count.textContent = `${done}/${entries.length}`;
     count.classList.toggle('is-complete', entries.length > 0 && done === entries.length);
@@ -406,8 +448,12 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
       const header = el('button', 'vp-header');
       header.type = 'button';
       header.dataset.viewport = String(viewportIndex);
-      header.title = 'Show this viewport';
-      header.append(el('strong', '', viewportLabel(viewport)), el('span', '', `${captureLabel(viewport)} · ${viewport.entries.length}`));
+      header.title = viewportLabel(viewport);
+      header.append(
+        el('span', '', `Screenshot ${viewportIndex + 1}`),
+        el('span', 'vp-size', `${viewport.width} × ${viewport.height}`),
+        el('span', 'vp-count', String(viewport.entries.length))
+      );
       const list = el('ol', 'comments-list');
       viewport.entries.forEach((entry) => {
         const isDone = state.done.has(entry.id);
@@ -417,34 +463,17 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
         item.classList.toggle('is-missing', entry.target === 'missing' || entry.target === 'hidden');
         item.classList.toggle('is-done', isDone);
         item.classList.toggle('is-selected', entry.id === state.selected);
+        item.classList.toggle('is-text-expanded', entry.id === state.expanded);
         item.tabIndex = 0;
-        const number = el('span', 'comment-number', String(entry.number));
-        const body = el('div', 'comment-body');
-        if (entry.kind === 'change') body.append(el('span', 'comment-kind', 'CSS change'));
+        if (entry.kind === 'change') item.append(el('span', 'comment-kind', 'CSS change'));
         const paragraph = el('p');
         entryText(entry, paragraph);
-        body.append(paragraph, el('small', '', entryMeta(entry)));
-        // Only comments without a place get placement actions; bound
-        // comments and whole-page notes are already where they belong.
-        const placeable = ['missing', 'hidden', 'pin'].includes(entry.target);
-        if (entry.id === state.selected && viewport.shots.length && placeable) {
-          const actions = el('div', 'comment-actions');
-          const placing = state.placing === entry.id;
-          const place = el('button', 'comment-action', placing ? 'Cancel' : placeLabel(entry));
-          place.type = 'button';
-          place.dataset.action = placing ? 'cancel' : 'place';
-          place.dataset.entry = entry.id;
-          place.classList.toggle('is-primary', !placing && entry.target !== 'pin');
-          actions.append(place);
-          if (entry.pin && !placing) {
-            const reset = el('button', 'comment-action', entry.auto ? 'Undo point' : 'Remove point');
-            reset.type = 'button';
-            reset.dataset.action = 'reset';
-            reset.dataset.entry = entry.id;
-            actions.append(reset);
-          }
-          body.append(actions);
-        }
+        item.append(paragraph);
+        const meta = el('div', 'comment-meta');
+        const number = el('span', 'comment-number', String(entry.number));
+        const target = el('span', 'comment-target', entryTarget(entry));
+        target.title = entryTarget(entry);
+        const stateText = entryState(entry);
         const check = el('button', 'comment-check');
         check.type = 'button';
         check.dataset.check = entry.id;
@@ -455,12 +484,58 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
         const box = el('i');
         box.innerHTML = CHECK_ICON;
         check.append(box);
-        item.append(number, body, check);
+        meta.append(number, target);
+        if (stateText) meta.append(el('span', 'comment-state', `· ${stateText}`));
+        const controls = el('div', 'comment-controls');
+        {
+          const menuOpen = state.menu === entry.id;
+          const more = el('button', 'comment-more');
+          more.type = 'button';
+          more.dataset.action = 'menu';
+          more.dataset.entry = entry.id;
+          more.title = 'Actions';
+          more.setAttribute('aria-label', `Actions for comment ${entry.number}`);
+          more.setAttribute('aria-haspopup', 'menu');
+          more.setAttribute('aria-expanded', String(menuOpen));
+          more.innerHTML = DOTS_ICON;
+          const menu = el('div', 'comment-menu');
+          menu.setAttribute('role', 'menu');
+          menu.hidden = !menuOpen;
+          const menuItem = (action, label, className) => {
+            const button = el('button', className, label);
+            button.type = 'button';
+            button.setAttribute('role', 'menuitem');
+            button.dataset.action = action;
+            button.dataset.entry = entry.id;
+            menu.append(button);
+          };
+          // Moving needs a screenshot to click on; deleting works everywhere.
+          if (viewport.shots.length) {
+            const placing = state.placing === entry.id;
+            menuItem(placing ? 'cancel' : 'place', placing ? 'Cancel' : 'Move comment');
+            if (entry.pin && entry.auto && !placing) menuItem('reset', 'Undo move');
+          }
+          menuItem('delete', 'Delete comment', 'is-danger');
+          // The menu opens under its own button, left of the checkbox.
+          const moreWrap = el('div', 'comment-more-wrap');
+          moreWrap.append(more, menu);
+          controls.append(moreWrap);
+        }
+        // The checkbox is the main action, so it stays at the far right.
+        controls.append(check);
+        meta.append(controls);
+        item.append(meta);
         list.append(item);
       });
       group.append(header, list);
       return group;
     }));
+    // Near the bottom of the panel the menu opens upwards to stay visible.
+    const openMenu = document.querySelector('.comment-menu:not([hidden])');
+    if (openMenu) {
+      const panelBottom = $('#comments-groups').getBoundingClientRect().bottom;
+      openMenu.classList.toggle('is-up', openMenu.getBoundingClientRect().bottom > panelBottom);
+    }
   }
 
   // Stage
@@ -661,6 +736,23 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     renderStage();
   }
 
+  function deleteEntry(id) {
+    if (!dropEntry(id)) return;
+    if (state.placing === id) stopPlacing();
+    if (state.selected === id) state.selected = null;
+    if (state.expanded === id) state.expanded = null;
+    state.menu = null;
+    state.done.delete(id);
+    saveDone();
+    delete pinDraft[id];
+    savePinDraft();
+    deletedDraft.push(id);
+    saveDeletedDraft();
+    markChanged();
+    render();
+    renderOverlay();
+  }
+
   function reviewFileName() {
     try {
       return decodeURIComponent(location.pathname.split('/').pop() || '') || 'the review file';
@@ -763,8 +855,10 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
       if (version === save.version) {
         state.unsaved = false;
         pinDraft = {};
+        deletedDraft = [];
         try {
           localStorage.removeItem(PINS_KEY);
+          localStorage.removeItem(DELETED_KEY);
           localStorage.removeItem(STORAGE_KEY);
         } catch { /* Nothing to clean up. */ }
       }
@@ -802,6 +896,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     state.viewport = 0;
     state.shot = 0;
     state.selected = null;
+    state.expanded = null;
+    state.menu = null;
     render();
     renderStage();
     $('#comments-groups').scrollTop = 0;
@@ -813,6 +909,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     state.viewport = index;
     state.shot = 0;
     state.selected = null;
+    state.expanded = null;
+    state.menu = null;
     renderComments();
     renderStage();
   }
@@ -834,6 +932,13 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     if (!state.selected) return;
     scrollEntryIntoPanel(id);
     if (!fromMarker) scrollEntryIntoStage(found.entry);
+  }
+
+  // Clicking a card selects it and expands its text past the three-line
+  // clamp; opening one collapses whichever other one was open.
+  function toggleEntryExpanded(id) {
+    state.expanded = state.expanded === id ? null : id;
+    selectEntry(id);
   }
 
   function selectShot(index) {
@@ -878,12 +983,39 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     if (button) selectPage(Number(button.dataset.page));
   });
 
+  function closeMenu() {
+    if (!state.menu) return;
+    state.menu = null;
+    renderComments();
+  }
+  // A click outside the comments list (stage, pages) closes an open menu.
+  document.addEventListener('click', (event) => {
+    // The path is taken before the list re-renders, so a click that just
+    // opened the menu is still recognised as inside the list.
+    if (state.menu && !event.composedPath().includes($('#comments-groups'))) closeMenu();
+  });
+
   $('#comments-groups').addEventListener('click', (event) => {
     const action = event.target.closest('[data-action]');
     if (action) {
-      if (action.dataset.action === 'place') startPlacing(action.dataset.entry);
+      const { entry } = action.dataset;
+      if (action.dataset.action === 'menu') {
+        state.menu = state.menu === entry ? null : entry;
+        renderComments();
+        return;
+      }
+      state.menu = null;
+      if (action.dataset.action === 'place') startPlacing(entry);
       else if (action.dataset.action === 'cancel') cancelPlacing();
-      else if (action.dataset.action === 'reset') resetPlacement(action.dataset.entry);
+      else if (action.dataset.action === 'reset') resetPlacement(entry);
+      else if (action.dataset.action === 'delete') deleteEntry(entry);
+      renderComments();
+      return;
+    }
+    // Any other click inside the list closes an open menu first.
+    if (state.menu) {
+      state.menu = null;
+      renderComments();
       return;
     }
     const check = event.target.closest('[data-check]');
@@ -897,13 +1029,13 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
       return;
     }
     const item = event.target.closest('.comment-item');
-    if (item) selectEntry(item.dataset.entry);
+    if (item) toggleEntryExpanded(item.dataset.entry);
   });
 
   $('#comments-groups').addEventListener('keydown', (event) => {
     const item = event.target.closest('.comment-item');
     if (!item || event.target !== item) return;
-    if (event.key === 'Enter') { event.preventDefault(); selectEntry(item.dataset.entry); }
+    if (event.key === 'Enter') { event.preventDefault(); toggleEntryExpanded(item.dataset.entry); }
     if (event.key === ' ') { event.preventDefault(); toggleDone(item.dataset.entry); }
   });
 
@@ -974,7 +1106,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     else if (event.key === '-' || event.key === '_') { event.preventDefault(); stepZoom(-1); }
     else if (event.key === '0' && !event.altKey) { event.preventDefault(); setFit(); }
     else if (event.key === '1' && !modifier) actualSize();
-    else if (event.key === 'Escape') { if (state.placing) cancelPlacing(); else clearSelection(); }
+    else if (event.key === 'Escape') { if (state.menu) closeMenu(); else if (state.placing) cancelPlacing(); else clearSelection(); }
     else if (event.key === '[') selectShot(state.shot - 1);
     else if (event.key === ']') selectShot(state.shot + 1);
     else if (!modifier && (event.key === 'ArrowDown' || event.key === 'j')) { event.preventDefault(); moveSelection(1); }
