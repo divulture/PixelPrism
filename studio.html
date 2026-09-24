@@ -88,20 +88,20 @@
     </aside>
     <aside class="comments-panel" id="comments-panel" hidden aria-labelledby="comments-title">
       <header class="comments-panel-header">
-        <div><h2 id="comments-title">Comments</h2><p id="comments-context">Page instruction</p></div>
+        <div><h2 id="comments-title">Comments</h2><p id="comments-context" hidden></p></div>
         <button type="button" class="comments-panel-close" id="comments-panel-close" aria-label="Close Comments" title="Close Comments"><span data-phosphor-icon="x"></span></button>
       </header>
       <form class="comments-form" id="comments-form">
-        <textarea id="comment-input" name="comment" rows="4" maxlength="2000" aria-label="Comment" placeholder="Write a review note..."></textarea>
+        <textarea id="comment-input" name="comment" rows="4" maxlength="2000" aria-label="Comment" placeholder="Write a comment..."></textarea>
         <button type="submit">Add</button>
       </form>
       <section class="comments-list-wrap" aria-labelledby="comments-list-title">
         <div class="comments-list-header">
-          <h3 id="comments-list-title">Pending notes</h3>
+          <h3 id="comments-list-title">Pending comments</h3>
           <button type="button" class="comments-menu-toggle tooltip-trigger" id="comments-menu-toggle" aria-label="Comment actions" data-tooltip="Comment actions" aria-haspopup="menu" aria-expanded="false" aria-controls="comments-menu"><span data-phosphor-icon="dots-three"></span></button>
           <div class="comment-menu comments-menu" id="comments-menu" role="menu" hidden>
-            <button type="button" role="menuitem" id="comments-import" title="Bring back comments from an exported HTML review"><span data-phosphor-icon="upload-simple"></span>Import review</button>
-            <button type="button" role="menuitem" id="comments-delete-all" class="is-danger"><span data-phosphor-icon="trash"></span>Delete all comments</button>
+            <button type="button" role="menuitem" id="comments-import" title="Bring back comments from an exported HTML review">Import review</button>
+            <button type="button" role="menuitem" id="comments-delete-all" class="is-danger">Delete all comments</button>
           </div>
           <input type="file" id="comments-import-input" accept=".html,text/html" hidden>
         </div>

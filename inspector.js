@@ -1236,12 +1236,13 @@
     :host { all: initial; }
     .target { position: fixed; box-sizing: border-box; display: none; border: 1.5px solid rgba(239, 68, 68, .9); border-radius: 2px; background: rgba(239, 68, 68, .07); pointer-events: none; }
     .target.is-drop { border-style: dashed; background: rgba(239, 68, 68, .1); }
-    .marker { position: fixed; left: 0; top: 0; box-sizing: border-box; display: grid; place-items: center; min-width: 22px; height: 22px; margin: -11px 0 0 -11px; padding: 0 5px; border: 2px solid #fff; border-radius: 999px; background: #ef4444; color: #fff; box-shadow: 0 2px 6px rgba(24, 24, 27, .3); font: 800 11px/1 Inter, ui-sans-serif, system-ui, sans-serif; font-variant-numeric: tabular-nums; cursor: grab; pointer-events: auto; user-select: none; touch-action: none; transition: box-shadow 120ms ease, opacity 120ms ease; }
-    .marker:hover { box-shadow: 0 0 0 3px rgba(239, 68, 68, .28), 0 2px 6px rgba(24, 24, 27, .3); }
-    .marker.is-selected { z-index: 2; box-shadow: 0 0 0 4px rgba(239, 68, 68, .32), 0 2px 8px rgba(24, 24, 27, .35); }
-    .marker.is-dragging { z-index: 3; cursor: grabbing; opacity: .92; transition: none; }
+    .marker { position: fixed; left: 0; top: 0; box-sizing: border-box; display: grid; place-items: center; width: 22px; height: 22px; margin: -11px 0 0 -11px; padding: 0; border: 2px solid #fff; border-radius: 50%; background: #ef4444; color: #fff; box-shadow: 0 1px 4px rgba(24, 24, 27, .3); font: 600 11px/1 Inter, ui-sans-serif, system-ui, sans-serif; font-variant-numeric: tabular-nums; cursor: grab; pointer-events: auto; user-select: none; touch-action: none; transition: box-shadow 120ms ease, opacity 120ms ease; }
+    .marker:hover { box-shadow: 0 0 0 3px rgba(239, 68, 68, .28), 0 1px 4px rgba(24, 24, 27, .3); }
+    .marker.is-selected { z-index: 2; animation: marker-select-pulse 1.6s ease-in-out infinite; }
+    .marker.is-dragging { z-index: 3; cursor: grabbing; opacity: .92; transition: none; animation: none; }
     .marker.is-pulse { animation: pulse 700ms ease-out 2; }
     @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, .6), 0 2px 6px rgba(24, 24, 27, .3); } 100% { box-shadow: 0 0 0 14px rgba(239, 68, 68, 0), 0 2px 6px rgba(24, 24, 27, .3); } }
+    @keyframes marker-select-pulse { 0%, 100% { box-shadow: 0 0 0 4px rgba(239, 68, 68, .32), 0 2px 8px rgba(24, 24, 27, .35); } 50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, .14), 0 2px 8px rgba(24, 24, 27, .35); } }
   </style><div class="target"></div>`;
   const commentTargetBox = commentShadow.querySelector('.target');
   document.documentElement.append(commentLayer);

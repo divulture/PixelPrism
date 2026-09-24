@@ -420,6 +420,9 @@ function activeCommentContext() {
 const commentIds = new WeakMap();
 let commentIdSeed = 0;
 let selectedCommentId = null;
+// The one comment shown in full instead of clamped to three lines; opening
+// another one collapses it, like an accordion.
+let expandedCommentId = null;
 let placingCommentId = null;
 // A comment from another page that was clicked: shown once that page loads.
 let pendingFocusCommentId = null;
@@ -429,6 +432,9 @@ let editingCommentId = null;
 let editingCommentDraft = '';
 // Page URL -> expanded, for groups the user opened or closed by hand.
 const commentGroupExpanded = new Map();
+// The group whose display name is being edited (a page URL), and its draft.
+let editingGroupTitleUrl = null;
+let editingGroupTitleDraft = '';
 let commentsMenuOpen = false;
 // Per card: comment id -> 'placed' | 'hidden' | 'missing', as its preview
 // reported after looking for the commented elements.
@@ -495,9 +501,11 @@ function commentPlacementLabel(comment, placement) {
 function renderComments() {
   const context = activeCommentContext();
   const placing = placingCommentId && commentById(placingCommentId);
-  commentsContext.textContent = placing
+  const contextText = placing
     ? `Moving comment ${comments.indexOf(placing) + 1}: click an element in a preview`
-    : context?.element?.selector ? `Selected: ${context.element.selector}` : 'Page instruction for the active viewport';
+    : context?.element?.selector ? `Selected: ${context.element.selector}` : '';
+  commentsContext.textContent = contextText;
+  commentsContext.hidden = !contextText;
   // Status updates re-render the list while a comment is being edited;
   // keep the caret where it was.
   const activeEditor = document.activeElement?.classList.contains('comment-edit-input') ? document.activeElement : null;
@@ -549,7 +557,8 @@ function commentGroups() {
   ));
 }
 
-function commentGroupLabel(url) {
+// The page's real path/host, ignoring any name the user typed in for it.
+function commentGroupRealLabel(url) {
   try {
     const parsed = new URL(url);
     const path = `${parsed.pathname}${parsed.search}` || '/';
@@ -559,6 +568,13 @@ function commentGroupLabel(url) {
   } catch {
     return url;
   }
+}
+
+// What the group actually shows: a short name the user typed in, if any,
+// otherwise the real path/host.
+function commentGroupLabel(url) {
+  restorePageTitles(commentOrigin(url));
+  return pageTitleOverrides.get(url) || commentGroupRealLabel(url);
 }
 
 function isCommentGroupExpanded(group) {
@@ -573,32 +589,52 @@ function renderCommentGroup(group) {
   node.dataset.groupKey = group.key;
   const header = document.createElement('div');
   header.className = 'comment-group-header';
-  const toggle = document.createElement('button');
-  toggle.type = 'button'; toggle.className = 'comment-group-toggle'; toggle.dataset.action = 'toggle-group';
-  toggle.setAttribute('aria-expanded', String(expanded));
-  toggle.innerHTML = window.phosphorIcon(expanded ? 'caret-down' : 'caret-right');
-  const title = document.createElement('span');
-  title.className = 'comment-group-title';
-  title.textContent = commentGroupLabel(group.url);
-  title.title = group.url;
+  // The title can turn into a text input to rename the page, so it can't
+  // live inside a <button> (invalid nesting) — the toggle is split around it.
+  const toggleStart = document.createElement('button');
+  toggleStart.type = 'button'; toggleStart.className = 'comment-group-toggle'; toggleStart.dataset.action = 'toggle-group';
+  toggleStart.setAttribute('aria-expanded', String(expanded));
+  toggleStart.innerHTML = window.phosphorIcon(expanded ? 'caret-down' : 'caret-right');
   const size = document.createElement('span');
-  size.className = 'comment-group-size';
-  size.textContent = `${group.viewport.width} × ${group.viewport.height}`;
-  toggle.append(title);
-  // Marks what the previews show right now: this page at this width.
-  if (group.isShown) {
-    const shown = document.createElement('span');
-    shown.className = 'comment-group-shown';
-    shown.title = 'Shown in the previews';
-    shown.innerHTML = window.phosphorIcon('eye');
-    toggle.append(shown);
+  size.className = 'comment-group-size tooltip-trigger';
+  size.dataset.tooltip = `${group.viewport.width} × ${group.viewport.height}`;
+  size.innerHTML = deviceIcon(deviceGlyph('', group.viewport.width));
+  toggleStart.append(size);
+  const isEditingTitle = editingGroupTitleUrl === group.url;
+  let title;
+  if (isEditingTitle) {
+    title = document.createElement('input');
+    title.type = 'text';
+    title.className = 'comment-group-title comment-group-title-input';
+    title.maxLength = 200;
+    title.setAttribute('aria-label', `Rename ${commentGroupRealLabel(group.url)}`);
+    title.value = editingGroupTitleDraft;
+  } else {
+    title = document.createElement('span');
+    title.className = 'comment-group-title';
+    title.textContent = commentGroupLabel(group.url);
+    // The real path/URL always shows on hover, even once the page has a
+    // typed-in display name.
+    title.title = commentGroupRealLabel(group.url);
+    title.tabIndex = 0;
+    title.dataset.action = 'rename-group';
   }
-  toggle.append(size);
+  const toggleEnd = document.createElement('button');
+  toggleEnd.type = 'button'; toggleEnd.className = 'comment-group-toggle comment-group-toggle-end'; toggleEnd.dataset.action = 'toggle-group';
   const count = document.createElement('span');
   count.className = 'comment-group-count';
   count.textContent = String(group.entries.length);
-  toggle.append(count);
-  header.append(toggle);
+  toggleEnd.append(count);
+  // Marks what the previews show right now: this page at this width. It
+  // sits right next to the title, not off by the count.
+  let shown = null;
+  if (group.isShown) {
+    shown = document.createElement('span');
+    shown.className = 'comment-group-shown';
+    shown.title = 'Shown in the previews';
+    shown.innerHTML = window.phosphorIcon('eye');
+  }
+  header.append(toggleStart, title, ...(shown ? [shown] : []), toggleEnd);
   const list = document.createElement('ol');
   list.className = 'comment-group-list';
   list.hidden = !expanded;
@@ -615,6 +651,7 @@ function renderCommentItem(comment, index) {
   item.className = `comment-item is-${placement}`;
   item.classList.toggle('is-selected', selectedCommentId === id);
   item.classList.toggle('is-placing', isPlacing);
+  item.classList.toggle('is-text-expanded', expandedCommentId === id);
   item.dataset.commentId = id;
   const number = document.createElement('span');
   number.className = 'comment-number';
@@ -644,7 +681,7 @@ function renderCommentItem(comment, index) {
     text = document.createElement('p');
     text.textContent = comment.comment;
   }
-  // Head row: number, element, whether it was found, actions. Text below.
+  // Text first, then the meta row: number, element, whether it was found, actions.
   const meta = document.createElement('div');
   meta.className = 'comment-meta';
   meta.append(number);
@@ -678,23 +715,25 @@ function renderCommentItem(comment, index) {
   remove.setAttribute('aria-label', `Delete comment ${index + 1}`);
   remove.dataset.tooltip = 'Delete comment';
   remove.innerHTML = window.phosphorIcon('trash');
-  actions.append(more, remove);
+  actions.append(remove, more);
   const menu = document.createElement('div');
   menu.className = 'comment-menu';
   menu.setAttribute('role', 'menu');
   menu.hidden = !menuOpen;
-  const menuItem = (action, icon, label) => {
+  const menuItem = (action, label) => {
     const button = document.createElement('button');
     button.type = 'button'; button.dataset.action = action;
     button.setAttribute('role', 'menuitem');
-    button.innerHTML = window.phosphorIcon(icon);
     button.append(label);
     menu.append(button);
   };
-  menuItem('edit', 'pencil-simple', 'Edit comment');
-  menuItem('move', 'arrows-out-cardinal', isPlacing ? 'Cancel moving' : (placement === 'placed' ? 'Move comment' : 'Place comment'));
+  menuItem('edit', 'Edit');
+  menuItem('move', isPlacing ? 'Cancel attaching' : (placement === 'placed' ? 'Reattach' : 'Place comment'));
+  // The menu lives inside actions so it tracks that row regardless of how
+  // tall the comment text above it is.
+  actions.append(menu);
   if (!isEditing) meta.append(actions);
-  item.append(meta, text, menu);
+  item.append(text, meta);
   return item;
 }
 
@@ -898,6 +937,48 @@ function restoreComments(origin = commentOrigin(targetUrl)) {
   if (!commentsPanel.hidden) renderComments();
   syncCommentMarkers();
   notify(`${restored.length} saved comment${restored.length === 1 ? '' : 's'} restored.`);
+}
+
+// A short display name the user typed in for a page, in place of its path.
+// Purely cosmetic and local: it survives a refresh but never touches the
+// real page, so the group's real path/URL still shows up on hover.
+const PAGE_TITLE_STORAGE_PREFIX = 'pixelprism-page-titles:';
+const storedPageTitleOrigins = new Set();
+const pageTitleOverrides = new Map();
+
+function restorePageTitles(origin) {
+  if (!origin || storedPageTitleOrigins.has(origin)) return;
+  storedPageTitleOrigins.add(origin);
+  let stored;
+  try {
+    stored = JSON.parse(localStorage.getItem(PAGE_TITLE_STORAGE_PREFIX + origin) || '{}');
+  } catch {
+    return;
+  }
+  if (!stored || typeof stored !== 'object') return;
+  Object.entries(stored).forEach(([url, name]) => {
+    if (typeof name === 'string' && name.trim()) pageTitleOverrides.set(url, name.trim());
+  });
+}
+
+function savePageTitles(origin) {
+  if (!origin) return;
+  storedPageTitleOrigins.add(origin);
+  const entries = {};
+  pageTitleOverrides.forEach((name, url) => { if (commentOrigin(url) === origin) entries[url] = name; });
+  try {
+    if (Object.keys(entries).length) localStorage.setItem(PAGE_TITLE_STORAGE_PREFIX + origin, JSON.stringify(entries));
+    else localStorage.removeItem(PAGE_TITLE_STORAGE_PREFIX + origin);
+  } catch {
+    // Storage full or unavailable: the rename still lives for this session.
+  }
+}
+
+function setPageTitleOverride(url, name) {
+  const trimmed = (name || '').trim();
+  if (trimmed) pageTitleOverrides.set(url, trimmed);
+  else pageTitleOverrides.delete(url);
+  savePageTitles(commentOrigin(url));
 }
 
 function reviewDataFromHtml(text) {
@@ -3100,12 +3181,26 @@ window.addEventListener('keydown', (event) => {
   handleStudioShortcut(shortcut);
 });
 
+// A click on the title toggles the group like the rest of the row, but a
+// double click renames it instead — so the single-click toggle waits a beat
+// to see whether a second click is on its way.
+let groupTitleClickTimer = null;
+
+function toggleCommentGroup(groupKey) {
+  const group = commentGroups().find((candidate) => candidate.key === groupKey);
+  if (group) commentGroupExpanded.set(groupKey, !isCommentGroupExpanded(group));
+  renderComments();
+}
+
 commentsList.addEventListener('click', (event) => {
   const groupKey = event.target.closest('.comment-group')?.dataset.groupKey;
   if (groupKey && event.target.closest('.comment-group-toggle')) {
-    const group = commentGroups().find((candidate) => candidate.key === groupKey);
-    if (group) commentGroupExpanded.set(groupKey, !isCommentGroupExpanded(group));
-    renderComments();
+    toggleCommentGroup(groupKey);
+    return;
+  }
+  if (groupKey && event.target.closest('[data-action="rename-group"]')) {
+    clearTimeout(groupTitleClickTimer);
+    groupTitleClickTimer = setTimeout(() => toggleCommentGroup(groupKey), 250);
     return;
   }
   const item = event.target.closest('.comment-item');
@@ -3145,6 +3240,7 @@ commentsList.addEventListener('click', (event) => {
     if (selectedCommentId === id) selectedCommentId = null;
     if (placingCommentId === id) placingCommentId = null;
     if (pendingFocusCommentId === id) pendingFocusCommentId = null;
+    if (expandedCommentId === id) expandedCommentId = null;
     saveComments();
     renderComments();
     syncChangeUi();
@@ -3185,6 +3281,9 @@ commentsList.addEventListener('click', (event) => {
     renderComments();
     return;
   }
+  // Selecting the card also expands its text past the three-line clamp;
+  // opening one collapses whichever other one was open.
+  expandedCommentId = expandedCommentId === id ? null : id;
   selectComment(id, { focus: true });
 });
 function startCommentEdit(id) {
@@ -3218,6 +3317,60 @@ function saveCommentEdit() {
   syncCommentMarkers();
   if (changed) notify(`Comment ${comments.indexOf(comment) + 1} updated.`, 'success');
 }
+
+function startGroupTitleEdit(url) {
+  editingGroupTitleUrl = url;
+  editingGroupTitleDraft = commentGroupLabel(url);
+  renderComments();
+  const input = commentsList.querySelector('.comment-group-title-input');
+  input?.focus();
+  input?.select();
+}
+
+function stopGroupTitleEdit() {
+  editingGroupTitleUrl = null;
+  editingGroupTitleDraft = '';
+  renderComments();
+}
+
+function saveGroupTitleEdit() {
+  const url = editingGroupTitleUrl;
+  if (!url) return;
+  const text = editingGroupTitleDraft.trim();
+  editingGroupTitleUrl = null;
+  editingGroupTitleDraft = '';
+  // Typing back the real name (or clearing the field) just drops the override.
+  setPageTitleOverride(url, text === commentGroupRealLabel(url) ? '' : text);
+  renderComments();
+}
+
+commentsList.addEventListener('dblclick', (event) => {
+  const titleEl = event.target.closest('[data-action="rename-group"]');
+  if (!titleEl) return;
+  clearTimeout(groupTitleClickTimer);
+  const groupKey = titleEl.closest('.comment-group')?.dataset.groupKey;
+  const group = groupKey && commentGroups().find((candidate) => candidate.key === groupKey);
+  if (group) startGroupTitleEdit(group.url);
+});
+commentsList.addEventListener('input', (event) => {
+  if (!event.target.classList.contains('comment-group-title-input')) return;
+  editingGroupTitleDraft = event.target.value;
+});
+commentsList.addEventListener('keydown', (event) => {
+  if (!event.target.classList.contains('comment-group-title-input')) return;
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    event.stopPropagation();
+    stopGroupTitleEdit();
+  } else if (event.key === 'Enter') {
+    event.preventDefault();
+    saveGroupTitleEdit();
+  }
+});
+commentsList.addEventListener('focusout', (event) => {
+  if (!event.target.classList.contains('comment-group-title-input')) return;
+  saveGroupTitleEdit();
+});
 
 commentsList.addEventListener('input', (event) => {
   if (!event.target.classList.contains('comment-edit-input')) return;

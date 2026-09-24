@@ -278,10 +278,11 @@ function reviewPreparationExpression({ changes = [], target, marker }) {
       const badge = document.createElement('span');
       badge.textContent = String(payload.marker || '');
       badge.style.cssText = [
-        'position:absolute', 'left:-4px', 'top:-30px', 'min-width:26px', 'height:26px',
-        'padding:0 7px', 'display:grid', 'place-items:center', 'box-sizing:border-box',
-        'border-radius:6px', 'background:#2563eb', 'color:#fff',
-        'font:700 13px/1 -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif'
+        'position:absolute', 'left:-4px', 'top:-30px', 'width:26px', 'height:26px',
+        'padding:0', 'display:grid', 'place-items:center', 'box-sizing:border-box',
+        'border-radius:50%', 'background:#2563eb', 'color:#fff',
+        'box-shadow:0 1px 4px rgba(24,24,27,.3)',
+        'font:600 13px/1 -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif'
       ].join(';');
       overlay.append(badge);
       document.documentElement.append(overlay);

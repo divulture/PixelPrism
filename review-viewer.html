@@ -101,11 +101,12 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
 .canvas img { display: block; width: 100%; height: 100%; user-select: none; -webkit-user-drag: none; }
 .overlay { position: absolute; inset: 0; }
 .highlight { position: absolute; border: 2px solid var(--accent); border-radius: 3px; background: rgba(239, 68, 68, .06); box-shadow: 0 0 0 9999px rgba(24, 24, 27, .32); pointer-events: none; transition: left 160ms ease, top 160ms ease, width 160ms ease, height 160ms ease; }
-.marker { position: absolute; z-index: 1; display: grid; place-items: center; min-width: 22px; height: 22px; margin: -11px 0 0 -11px; padding: 0 5px; border: 2px solid #fff; border-radius: 999px; background: var(--accent); color: #fff; box-shadow: 0 2px 6px rgba(24, 24, 27, .3); font-size: 11px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; transform: translateX(var(--offset, 0px)) scale(var(--scale, 1)); transition: transform 120ms ease, opacity 120ms ease, background 120ms ease; }
+.marker { position: absolute; z-index: 1; display: grid; place-items: center; width: 22px; height: 22px; margin: -11px 0 0 -11px; padding: 0; border: 2px solid #fff; border-radius: 50%; background: var(--accent); color: #fff; box-shadow: 0 1px 4px rgba(24, 24, 27, .3); font-size: 11px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; transform: translateX(var(--offset, 0px)) scale(var(--scale, 1)); transition: transform 120ms ease, opacity 120ms ease, background 120ms ease; }
 .marker:hover { --scale: 1.12; }
 .marker.is-done { background: var(--faint); }
 .overlay.has-selection .marker { opacity: .4; }
-.overlay.has-selection .marker.is-selected { z-index: 2; opacity: 1; --scale: 1.18; box-shadow: 0 0 0 4px rgba(239, 68, 68, .28), 0 2px 8px rgba(24, 24, 27, .35); }
+.overlay.has-selection .marker.is-selected { z-index: 2; opacity: 1; --scale: 1.18; animation: marker-select-pulse 1.6s ease-in-out infinite; }
+@keyframes marker-select-pulse { 0%, 100% { box-shadow: 0 0 0 4px rgba(239, 68, 68, .28), 0 2px 8px rgba(24, 24, 27, .35); } 50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, .12), 0 2px 8px rgba(24, 24, 27, .35); } }
 .stage-empty { display: grid; place-items: center; height: 100%; padding: 24px; color: var(--muted); font-size: 12px; font-weight: 500; text-align: center; }
 .stage-empty strong { display: block; margin-bottom: 4px; color: var(--ink); font-weight: 700; }
 
