@@ -55,13 +55,18 @@ const commentsContext = document.querySelector('#comments-context');
 const commentsList = document.querySelector('#comments-list');
 const commentsEmpty = document.querySelector('#comments-empty');
 const commentsCount = document.querySelector('#comments-count');
+const commentsImportButton = document.querySelector('#comments-import');
+const commentsMenuToggle = document.querySelector('#comments-menu-toggle');
+const commentsMenu = document.querySelector('#comments-menu');
+const commentsMenuDeleteAll = document.querySelector('#comments-delete-all');
+const commentsImportInput = document.querySelector('#comments-import-input');
 
 let targetUrl = normalizeUrl(params.get('url') || '');
 let fileAccessAllowed = params.get('fileAccess') !== 'false';
-let selected = new Set(['laptop']);
+let selected = new Set(['desktop']);
 let mode = 'multi';
 let zoom = 1;
-let singleWidth = DEVICES.laptop.width;
+let singleWidth = DEVICES.desktop.width;
 let customDeviceCount = 0;
 let dragState = null;
 let faviconCandidates = [];
@@ -100,7 +105,7 @@ const CUSTOM_PRESETS = {
 
 const MIN_VIEWPORT_WIDTH = 320;
 const MIN_VIEWPORT_HEIGHT = 320;
-const INSPECTOR_PROTOCOL_VERSION = 7;
+const INSPECTOR_PROTOCOL_VERSION = 14;
 
 const INSPECTOR_FIELDS = {
   size: [['width', 'W', 'text'], ['height', 'H', 'text'], ['minWidth', 'Min width', 'text'], ['maxWidth', 'Max width', 'text'], ['minHeight', 'Min height', 'text'], ['maxHeight', 'Max height', 'text']],
@@ -306,6 +311,7 @@ function openPreviewUrl(value, confirmExternal = false) {
   if (confirmExternal && external && !window.confirm(`Open ${displayAddress(nextUrl)} in every viewport?\n\nLocal inspector changes will be reset.`)) return;
   if (targetUrl !== nextUrl) localFileHandle = undefined;
   targetUrl = nextUrl;
+  restoreComments();
   fileAccessAllowed = true;
   urlInput.value = targetUrl;
   setFavicon();
@@ -406,28 +412,376 @@ function activeCommentContext() {
   if (!commentSelection?.frame?.isConnected) return null;
   const card = cardForFrame(commentSelection.frame.contentWindow);
   if (!card) return null;
-  return { url: canonicalInspectorUrl(card.dataset.loadedUrl || targetUrl), route: commentSelection.route || '/', viewport: { width: Number(card.dataset.viewportWidth), height: Number(card.dataset.viewportHeight) }, element: commentSelection.element };
+  return { url: canonicalInspectorUrl(card.dataset.loadedUrl || targetUrl), route: commentSelection.route || '/', viewport: { width: Number(card.dataset.viewportWidth), height: Number(card.dataset.viewportHeight) }, element: commentSelection.element, steps: commentSelection.steps || [] };
+}
+
+// Comments have no stored id; this one only has to stay stable while the
+// studio is open, so markers in the previews can refer to their comment.
+const commentIds = new WeakMap();
+let commentIdSeed = 0;
+let selectedCommentId = null;
+let placingCommentId = null;
+// A comment from another page that was clicked: shown once that page loads.
+let pendingFocusCommentId = null;
+let openCommentMenuId = null;
+// The comment being edited in the list, and its unsaved text.
+let editingCommentId = null;
+let editingCommentDraft = '';
+// Page URL -> expanded, for groups the user opened or closed by hand.
+const commentGroupExpanded = new Map();
+let commentsMenuOpen = false;
+// Per card: comment id -> 'placed' | 'hidden' | 'missing', as its preview
+// reported after looking for the commented elements.
+const cardMarkerStatuses = new WeakMap();
+
+function commentId(comment) {
+  if (!commentIds.has(comment)) commentIds.set(comment, `comment-${commentIdSeed += 1}`);
+  return commentIds.get(comment);
+}
+
+function commentById(id) {
+  return comments.find((comment) => commentId(comment) === id);
+}
+
+function isCommentAnchored(comment) {
+  return Boolean(comment.element || comment.pin);
+}
+
+// A comment belongs to the page and viewport it was written in, so its
+// marker is shown only in a preview of the same page at the same width.
+function commentShownOnCard(comment, card) {
+  return !card.classList.contains('is-embed-blocked')
+    && canonicalInspectorUrl(card.dataset.loadedUrl || targetUrl) === canonicalInspectorUrl(comment.url)
+    && Number(card.dataset.viewportWidth) === comment.viewport.width;
+}
+
+function commentPlacement(comment) {
+  if (!isCommentAnchored(comment)) return 'page';
+  const cards = [...document.querySelectorAll('.viewport-card')];
+  const showing = cards.filter((card) => commentShownOnCard(comment, card));
+  if (!showing.length) {
+    const url = canonicalInspectorUrl(comment.url);
+    return cards.some((card) => canonicalInspectorUrl(card.dataset.loadedUrl || targetUrl) === url) ? 'other-viewport' : 'other-page';
+  }
+  const id = commentId(comment);
+  const states = showing.map((card) => cardMarkerStatuses.get(card)?.get(id));
+  if (states.includes('placed')) return 'placed';
+  if (states.includes('other-view')) return 'other-view';
+  if (states.includes('approx')) return 'approx';
+  if (states.includes('hidden')) return 'hidden';
+  if (states.includes('missing')) return 'missing';
+  return 'loading';
+}
+
+// The tabs and panels switched to before a comment was left: Archive › Week.
+function viewStepsLabel(steps) {
+  return (Array.isArray(steps) ? steps : []).map((step) => step.label).filter(Boolean).join(' › ') || 'another view';
+}
+
+function commentViewLabel(comment) {
+  return viewStepsLabel(comment.steps);
+}
+
+function commentPlacementLabel(comment, placement) {
+  switch (placement) {
+    case 'hidden': return 'Hidden';
+    case 'missing': return 'Not found';
+    case 'approx': return 'Not found · by position';
+    case 'other-view': return `In “${commentViewLabel(comment)}”`;
+    default: return '';
+  }
 }
 
 function renderComments() {
   const context = activeCommentContext();
-  commentsContext.textContent = context?.element?.selector ? `Selected: ${context.element.selector}` : 'Page instruction for the active viewport';
-  commentsList.replaceChildren(...comments.map((comment, index) => {
-    const item = document.createElement('li');
-    item.className = 'comment-item';
-    const text = document.createElement('p');
-    text.textContent = comment.comment;
-    const meta = document.createElement('small');
-    meta.textContent = comment.element?.selector ? `${comment.element.selector} · ${comment.viewport.width} × ${comment.viewport.height}` : `Page · ${comment.viewport.width} × ${comment.viewport.height}`;
-    const remove = document.createElement('button');
-    remove.type = 'button'; remove.className = 'comment-remove tooltip-trigger'; remove.dataset.commentIndex = String(index);
-    remove.setAttribute('aria-label', `Delete comment ${index + 1}`);
-    remove.dataset.tooltip = 'Delete comment';
-    remove.innerHTML = window.phosphorIcon('trash');
-    item.append(text, meta, remove);
-    return item;
-  }));
+  const placing = placingCommentId && commentById(placingCommentId);
+  commentsContext.textContent = placing
+    ? `Moving comment ${comments.indexOf(placing) + 1}: click an element in a preview`
+    : context?.element?.selector ? `Selected: ${context.element.selector}` : 'Page instruction for the active viewport';
+  // Status updates re-render the list while a comment is being edited;
+  // keep the caret where it was.
+  const activeEditor = document.activeElement?.classList.contains('comment-edit-input') ? document.activeElement : null;
+  const selection = activeEditor ? [activeEditor.selectionStart, activeEditor.selectionEnd, activeEditor.scrollTop] : null;
+  commentsList.replaceChildren(...commentGroups().map((group) => renderCommentGroup(group)));
+  const editor = commentsList.querySelector('.comment-edit-input');
+  if (editor && selection) {
+    editor.focus({ preventScroll: true });
+    editor.setSelectionRange(selection[0], selection[1]);
+    editor.scrollTop = selection[2];
+  }
   commentsEmpty.hidden = comments.length > 0;
+  commentsMenuDeleteAll.disabled = comments.length === 0;
+  // Near the bottom of the list the menu opens upwards to stay visible.
+  const openMenu = commentsList.querySelector('.comment-menu:not([hidden])');
+  if (openMenu) {
+    const listBottom = commentsList.closest('.comments-list-wrap').getBoundingClientRect().bottom;
+    openMenu.classList.toggle('is-up', openMenu.getBoundingClientRect().bottom > listBottom);
+  }
+}
+
+// Comments grouped by page: the page open in the previews comes first and
+// is expanded; other pages start collapsed so they do not bury it.
+// A group is one page at one viewport size, so notes left at another width
+// on the same page are told apart at a glance.
+function commentGroupKey(comment) {
+  return [canonicalInspectorUrl(comment.url), comment.viewport.width, comment.viewport.height].join('\u0000');
+}
+
+function commentGroups() {
+  const current = canonicalInspectorUrl(targetUrl);
+  const cards = [...document.querySelectorAll('.viewport-card')];
+  const groups = new Map();
+  comments.forEach((comment, index) => {
+    const url = canonicalInspectorUrl(comment.url);
+    const key = commentGroupKey(comment);
+    if (!groups.has(key)) {
+      const isCurrent = url === current;
+      groups.set(key, { key, url, viewport: comment.viewport, isCurrent, isShown: isCurrent && cards.some((card) => commentShownOnCard(comment, card)), entries: [] });
+    }
+    groups.get(key).entries.push({ comment, index });
+  });
+  // A fixed order, so opening a page never reshuffles the list: pages
+  // alphabetically, sizes of one page narrowest first like the preview cards.
+  return [...groups.values()].sort((left, right) => (
+    left.url.localeCompare(right.url, undefined, { numeric: true })
+    || left.viewport.width - right.viewport.width
+    || left.viewport.height - right.viewport.height
+  ));
+}
+
+function commentGroupLabel(url) {
+  try {
+    const parsed = new URL(url);
+    const path = `${parsed.pathname}${parsed.search}` || '/';
+    let currentOrigin = '';
+    try { currentOrigin = new URL(targetUrl).origin; } catch { /* No page open. */ }
+    return parsed.origin === currentOrigin || parsed.protocol === 'file:' ? path : `${parsed.host}${path}`;
+  } catch {
+    return url;
+  }
+}
+
+function isCommentGroupExpanded(group) {
+  return commentGroupExpanded.get(group.key) ?? group.isShown;
+}
+
+function renderCommentGroup(group) {
+  const expanded = isCommentGroupExpanded(group);
+  const node = document.createElement('li');
+  node.className = 'comment-group';
+  node.classList.toggle('is-current', group.isCurrent);
+  node.dataset.groupKey = group.key;
+  const header = document.createElement('div');
+  header.className = 'comment-group-header';
+  const toggle = document.createElement('button');
+  toggle.type = 'button'; toggle.className = 'comment-group-toggle'; toggle.dataset.action = 'toggle-group';
+  toggle.setAttribute('aria-expanded', String(expanded));
+  toggle.innerHTML = window.phosphorIcon(expanded ? 'caret-down' : 'caret-right');
+  const title = document.createElement('span');
+  title.className = 'comment-group-title';
+  title.textContent = commentGroupLabel(group.url);
+  title.title = group.url;
+  const size = document.createElement('span');
+  size.className = 'comment-group-size';
+  size.textContent = `${group.viewport.width} × ${group.viewport.height}`;
+  toggle.append(title);
+  // Marks what the previews show right now: this page at this width.
+  if (group.isShown) {
+    const shown = document.createElement('span');
+    shown.className = 'comment-group-shown';
+    shown.title = 'Shown in the previews';
+    shown.innerHTML = window.phosphorIcon('eye');
+    toggle.append(shown);
+  }
+  toggle.append(size);
+  const count = document.createElement('span');
+  count.className = 'comment-group-count';
+  count.textContent = String(group.entries.length);
+  toggle.append(count);
+  header.append(toggle);
+  const list = document.createElement('ol');
+  list.className = 'comment-group-list';
+  list.hidden = !expanded;
+  if (expanded) list.append(...group.entries.map(({ comment, index }) => renderCommentItem(comment, index)));
+  node.append(header, list);
+  return node;
+}
+
+function renderCommentItem(comment, index) {
+  const id = commentId(comment);
+  const placement = commentPlacement(comment);
+  const isPlacing = placingCommentId === id;
+  const item = document.createElement('li');
+  item.className = `comment-item is-${placement}`;
+  item.classList.toggle('is-selected', selectedCommentId === id);
+  item.classList.toggle('is-placing', isPlacing);
+  item.dataset.commentId = id;
+  const number = document.createElement('span');
+  number.className = 'comment-number';
+  number.textContent = String(index + 1);
+  const isEditing = editingCommentId === id;
+  item.classList.toggle('is-editing', isEditing);
+  let text;
+  if (isEditing) {
+    text = document.createElement('div');
+    text.className = 'comment-edit';
+    const field = document.createElement('textarea');
+    field.className = 'comment-edit-input';
+    field.maxLength = 2000;
+    field.setAttribute('aria-label', `Edit comment ${index + 1}`);
+    field.value = editingCommentDraft;
+    const actions = document.createElement('div');
+    actions.className = 'comment-edit-actions';
+    const cancel = document.createElement('button');
+    cancel.type = 'button'; cancel.dataset.action = 'edit-cancel'; cancel.textContent = 'Cancel';
+    const save = document.createElement('button');
+    save.type = 'button'; save.dataset.action = 'edit-save'; save.textContent = 'Save';
+    save.title = 'Save (⌘ Enter)';
+    save.disabled = !editingCommentDraft.trim();
+    actions.append(cancel, save);
+    text.append(field, actions);
+  } else {
+    text = document.createElement('p');
+    text.textContent = comment.comment;
+  }
+  // Head row: number, element, whether it was found, actions. Text below.
+  const meta = document.createElement('div');
+  meta.className = 'comment-meta';
+  meta.append(number);
+  const target = document.createElement('span');
+  target.className = 'comment-target';
+  target.textContent = comment.pin ? 'Pinned point' : comment.element?.selector || 'Page';
+  target.title = target.textContent;
+  // While moving, the hint takes the selector's place.
+  const state = isPlacing ? 'Click an element · Esc cancels' : commentPlacementLabel(comment, placement);
+  if (!isPlacing) meta.append(target);
+  if (state) {
+    const stateText = document.createElement('span');
+    stateText.className = 'comment-state';
+    stateText.textContent = isPlacing ? state : `· ${state}`;
+    if (placement === 'approx' && !isPlacing) stateText.title = 'The element is gone; the marker shows where it was when the comment was left.';
+    meta.append(stateText);
+  }
+  const actions = document.createElement('div');
+  actions.className = 'comment-actions';
+  const menuOpen = openCommentMenuId === id;
+  const more = document.createElement('button');
+  more.type = 'button'; more.className = 'comment-more tooltip-trigger'; more.dataset.action = 'menu';
+  more.setAttribute('aria-label', `Actions for comment ${index + 1}`);
+  more.setAttribute('aria-haspopup', 'menu');
+  more.setAttribute('aria-expanded', String(menuOpen));
+  more.dataset.tooltip = 'Actions';
+  more.classList.toggle('is-placing', isPlacing);
+  more.innerHTML = window.phosphorIcon('dots-three');
+  const remove = document.createElement('button');
+  remove.type = 'button'; remove.className = 'comment-delete tooltip-trigger'; remove.dataset.action = 'delete';
+  remove.setAttribute('aria-label', `Delete comment ${index + 1}`);
+  remove.dataset.tooltip = 'Delete comment';
+  remove.innerHTML = window.phosphorIcon('trash');
+  actions.append(more, remove);
+  const menu = document.createElement('div');
+  menu.className = 'comment-menu';
+  menu.setAttribute('role', 'menu');
+  menu.hidden = !menuOpen;
+  const menuItem = (action, icon, label) => {
+    const button = document.createElement('button');
+    button.type = 'button'; button.dataset.action = action;
+    button.setAttribute('role', 'menuitem');
+    button.innerHTML = window.phosphorIcon(icon);
+    button.append(label);
+    menu.append(button);
+  };
+  menuItem('edit', 'pencil-simple', 'Edit comment');
+  menuItem('move', 'arrows-out-cardinal', isPlacing ? 'Cancel moving' : (placement === 'placed' ? 'Move comment' : 'Place comment'));
+  if (!isEditing) meta.append(actions);
+  item.append(meta, text, menu);
+  return item;
+}
+
+// Sends each preview the markers of its page and width. Previews that never
+// showed markers are left alone, so closing the panel installs nothing.
+function syncCommentMarkers() {
+  if (!hasExtensionRuntime) return;
+  const enabled = !commentsPanel.hidden;
+  document.querySelectorAll('.viewport-card').forEach((card) => {
+    const frame = card.querySelector('iframe');
+    if (!frame?.contentWindow || card.dataset.previewReady !== 'true') return;
+    if (!enabled && !card.commentMarkersPayload) return;
+    const markers = enabled ? comments.flatMap((comment, index) => (
+      isCommentAnchored(comment) && commentShownOnCard(comment, card)
+        ? [{ id: commentId(comment), number: index + 1, text: comment.comment, element: comment.element || null, selector: comment.element?.selector || '', pin: comment.pin || null, offset: comment.offset || null, steps: comment.steps || [] }]
+        : []
+    )) : [];
+    const message = { source: 'viewport-parade', type: 'comment-markers', enabled, markers, selectedId: enabled ? selectedCommentId : null, scale: Number(card.dataset.scale) || 1 };
+    const payload = enabled ? JSON.stringify(message) : '';
+    if (payload === (card.commentMarkersPayload || '')) return;
+    card.commentMarkersPayload = payload;
+    frame.contentWindow.postMessage(message, '*');
+  });
+}
+
+function selectComment(id, { focus = false, reveal = false } = {}) {
+  const comment = commentById(id);
+  if (!comment) return;
+  selectedCommentId = id;
+  if (reveal) commentGroupExpanded.set(commentGroupKey(comment), true);
+  renderComments();
+  syncCommentMarkers();
+  if (focus) {
+    document.querySelectorAll('.viewport-card').forEach((card) => {
+      if (!commentShownOnCard(comment, card)) return;
+      card.querySelector('iframe')?.contentWindow?.postMessage({ source: 'viewport-parade', type: 'comment-marker-focus', id }, '*');
+    });
+  }
+  if (reveal) commentsList.querySelector(`[data-comment-id="${id}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+function setCommentPlacing(id) {
+  placingCommentId = id && placingCommentId !== id ? id : null;
+  if (placingCommentId) {
+    selectedCommentId = placingCommentId;
+    clearInspectorSelections();
+    speak(`Click an element in any preview to move comment ${comments.indexOf(commentById(placingCommentId)) + 1}.`);
+  }
+  renderComments();
+  syncCommentMarkers();
+}
+
+// Re-binds a comment to an element or point in a preview. The comment then
+// belongs to that preview's page and width, like a newly written one.
+function moveComment(id, card, { element, pin, route, offset, same = false, steps }) {
+  const comment = commentById(id);
+  if (!comment || !card) return;
+  // A new target lives in the view the preview shows now.
+  if (!same && Array.isArray(steps)) {
+    if (steps.length) comment.steps = steps;
+    else delete comment.steps;
+  }
+  comment.url = canonicalInspectorUrl(card.dataset.loadedUrl || targetUrl);
+  if (typeof route === 'string') comment.route = route;
+  comment.viewport = { width: Number(card.dataset.viewportWidth), height: Number(card.dataset.viewportHeight) };
+  if (pin) {
+    comment.pin = { x: Math.round(pin.x), y: Math.round(pin.y) };
+    delete comment.element;
+    delete comment.offset;
+  } else if (element && typeof element === 'object') {
+    comment.element = element;
+    delete comment.pin;
+    // A marker dragged into place keeps its spot in the element; a comment
+    // attached by clicking starts at the element's corner again.
+    if (offset && Number.isFinite(offset.x) && Number.isFinite(offset.y)) comment.offset = { x: Math.round(offset.x), y: Math.round(offset.y) };
+    else delete comment.offset;
+  } else {
+    return;
+  }
+  placingCommentId = null;
+  selectedCommentId = id;
+  saveComments();
+  renderComments();
+  syncCommentMarkers();
+  const number = comments.indexOf(comment) + 1;
+  if (same) notify(`Marker ${number} moved within ${element.selector || 'its element'}.`, 'success');
+  else notify(`Comment ${number} moved to ${pin ? 'the pinned point' : element.selector || 'the element'}.`, 'success');
 }
 
 function setCommentPicker(enabled) {
@@ -456,8 +810,10 @@ function setCommentsOpen(open) {
   }
   commentsPanel.hidden = !open;
   commentsToggle.setAttribute('aria-pressed', String(open));
+  if (!open) { placingCommentId = null; pendingFocusCommentId = null; openCommentMenuId = null; editingCommentId = null; setCommentsMenuOpen(false); }
   if (open) { renderComments(); setCommentPicker(true); }
   else setCommentPicker(false);
+  syncCommentMarkers();
 }
 
 function addComment(rawComment) {
@@ -466,9 +822,149 @@ function addComment(rawComment) {
   const context = activeCommentContext();
   const activeCard = cardForFrame(layersFrame) || document.querySelector('.viewport-card');
   const viewport = context?.viewport || (activeCard ? { width: Number(activeCard.dataset.viewportWidth), height: Number(activeCard.dataset.viewportHeight) } : { width: window.innerWidth, height: window.innerHeight });
-  comments.push({ type: 'comment', url: context?.url || canonicalInspectorUrl(activeCard?.dataset.loadedUrl || targetUrl), route: context?.route || '/', viewport, ...(context?.element ? { element: context.element } : {}), comment });
+  comments.push({ type: 'comment', url: context?.url || canonicalInspectorUrl(activeCard?.dataset.loadedUrl || targetUrl), route: context?.route || '/', viewport, ...(context?.element ? { element: context.element } : {}), ...(context?.steps?.length ? { steps: context.steps } : {}), comment });
   commentInput.value = '';
-  renderComments(); syncChangeUi(); notify('Comment added to the pending handoff.', 'success');
+  saveComments();
+  renderComments(); syncChangeUi(); syncCommentMarkers(); notify('Comment added to the pending handoff.', 'success');
+}
+
+// Comments survive a closed studio tab or an extension reload. They are kept
+// per site, so a studio opened for another site starts with its own notes.
+const COMMENTS_STORAGE_PREFIX = 'pixelprism-comments:';
+const storedCommentOrigins = new Set();
+
+function commentOrigin(url) {
+  try {
+    const origin = new URL(url).origin;
+    return origin === 'null' ? 'file://' : origin;
+  } catch {
+    return '';
+  }
+}
+
+function commentIdentity(comment) {
+  const target = comment.pin
+    ? `pin:${Math.round(comment.pin.x)},${Math.round(comment.pin.y)}`
+    : comment.element ? reviewElementKey(comment.element, comment.element.selector) : 'page';
+  return [canonicalInspectorUrl(comment.url), comment.viewport.width, comment.viewport.height, target, comment.comment].join('\u0000');
+}
+
+function isValidComment(comment) {
+  return comment && typeof comment === 'object'
+    && typeof comment.url === 'string'
+    && typeof comment.comment === 'string' && comment.comment.trim()
+    && Number.isFinite(comment.viewport?.width) && Number.isFinite(comment.viewport?.height)
+    && (!comment.pin || (Number.isFinite(comment.pin.x) && Number.isFinite(comment.pin.y)));
+}
+
+function saveComments() {
+  // A comment on a site not seen yet this session (a preview followed a
+  // link) must not overwrite the notes already stored for that site.
+  new Set(comments.map((comment) => commentOrigin(comment.url))).forEach((origin) => restoreComments(origin));
+  const byOrigin = new Map([...storedCommentOrigins].map((origin) => [origin, []]));
+  comments.forEach((comment) => {
+    const origin = commentOrigin(comment.url);
+    if (!origin) return;
+    if (!byOrigin.has(origin)) byOrigin.set(origin, []);
+    byOrigin.get(origin).push(comment);
+  });
+  byOrigin.forEach((list, origin) => {
+    storedCommentOrigins.add(origin);
+    try {
+      if (list.length) localStorage.setItem(COMMENTS_STORAGE_PREFIX + origin, JSON.stringify(list));
+      else localStorage.removeItem(COMMENTS_STORAGE_PREFIX + origin);
+    } catch {
+      // Storage full or unavailable: comments still live for this session.
+    }
+  });
+}
+
+// Adds the comments saved for a site, once per site and session.
+function restoreComments(origin = commentOrigin(targetUrl)) {
+  if (!origin || storedCommentOrigins.has(origin)) return;
+  storedCommentOrigins.add(origin);
+  let stored = [];
+  try {
+    stored = JSON.parse(localStorage.getItem(COMMENTS_STORAGE_PREFIX + origin) || '[]');
+  } catch {
+    return;
+  }
+  if (!Array.isArray(stored)) return;
+  const known = new Set(comments.map(commentIdentity));
+  const restored = stored.filter((comment) => isValidComment(comment) && !known.has(commentIdentity(comment)));
+  if (!restored.length) return;
+  comments.push(...restored);
+  syncChangeUi();
+  if (!commentsPanel.hidden) renderComments();
+  syncCommentMarkers();
+  notify(`${restored.length} saved comment${restored.length === 1 ? '' : 's'} restored.`);
+}
+
+function reviewDataFromHtml(text) {
+  const parsed = new DOMParser().parseFromString(text, 'text/html');
+  const raw = parsed.getElementById('pixelprism-review-data')?.textContent;
+  if (!raw || raw.includes('{{PIXELPRISM_REVIEW_DATA}}')) throw new Error('This file is not a PixelPrism HTML review.');
+  const data = JSON.parse(raw);
+  if (!Array.isArray(data?.pages)) throw new Error('This review has no pages.');
+  return data;
+}
+
+// Brings comments back from an exported HTML review. Older exports only
+// carry the element selector; newer ones carry the full element record and
+// points placed by hand in the review.
+async function importReviewFile(file) {
+  const data = reviewDataFromHtml(await file.text());
+  const known = new Set(comments.map(commentIdentity));
+  let added = 0;
+  let duplicates = 0;
+  let changes = 0;
+  data.pages.forEach((page) => {
+    const url = canonicalInspectorUrl(String(page.url || ''));
+    let route = '/';
+    try { route = new URL(url).pathname || '/'; } catch { /* Keep the default route. */ }
+    (page.viewports || []).forEach((viewport) => {
+      (viewport.entries || []).forEach((entry) => {
+        if (entry.kind === 'change') {
+          changes += 1;
+          return;
+        }
+        let element = null;
+        if (entry.element && typeof entry.element === 'object') element = entry.element;
+        else if (entry.target !== 'page' && entry.selector) element = { selector: String(entry.selector) };
+        const pin = entry.pin && Number.isFinite(entry.pin.x) && Number.isFinite(entry.pin.y)
+          ? { x: Math.round(entry.pin.x), y: Math.round(entry.pin.y) }
+          : null;
+        const comment = {
+          type: 'comment',
+          url,
+          route,
+          viewport: { width: Math.round(Number(viewport.width) || 0), height: Math.round(Number(viewport.height) || 0) },
+          ...(element ? { element } : {}),
+          ...(pin ? { pin } : {}),
+          ...(Array.isArray(viewport.steps) && viewport.steps.length ? { steps: viewport.steps } : {}),
+          ...(!pin && element && entry.offset && Number.isFinite(entry.offset.x) && Number.isFinite(entry.offset.y) ? { offset: { x: Math.round(entry.offset.x), y: Math.round(entry.offset.y) } } : {}),
+          comment: String(entry.text || '')
+        };
+        if (!isValidComment(comment)) return;
+        const identity = commentIdentity(comment);
+        if (known.has(identity)) {
+          duplicates += 1;
+          return;
+        }
+        known.add(identity);
+        comments.push(comment);
+        added += 1;
+      });
+    });
+  });
+  saveComments();
+  renderComments();
+  syncChangeUi();
+  syncCommentMarkers();
+  const notes = [];
+  if (duplicates) notes.push(`${duplicates} already in the list`);
+  if (changes) notes.push(`${changes} CSS change${changes === 1 ? '' : 's'} skipped`);
+  notify(`Imported ${added} comment${added === 1 ? '' : 's'}${notes.length ? ` (${notes.join(', ')})` : ''}.`, added ? 'success' : undefined);
 }
 
 function reconcilePendingChanges(card) {
@@ -636,7 +1132,9 @@ function formatChangeReport() {
     lines.push('', '## Comments');
     comments.forEach((comment) => {
       const target = comment.element?.selector ? ` · \`${escapeInlineCode(comment.element.selector)}\`` : ' · page-level';
-      lines.push(`- ${comment.comment} (${comment.viewport.width} × ${comment.viewport.height}${target})`);
+      const rect = comment.pin ? { x: comment.pin.x, y: comment.pin.y } : comment.element?.rect;
+      const position = rect ? ` · at ${rect.x}, ${rect.y}${Number.isFinite(rect.width) ? `, ${rect.width} × ${rect.height}` : ''}` : '';
+      lines.push(`- ${comment.comment} (${comment.viewport.width} × ${comment.viewport.height}${target}${position})`);
     });
   }
   return `${lines.join('\n')}\n`;
@@ -1239,7 +1737,7 @@ async function downloadReviewPdf() {
             // Screenshots show the live site as it is; edits are listed as before/after notes.
             changes: [],
             targets: context.targets
-          }), 20000, 'The page took too long to prepare.');
+          }), 45000, 'The page took too long to prepare.');
           if (!response?.ok) throw new Error(response?.error || 'Unable to capture this page.');
           const captures = new Map((response.captures || []).map((capture) => [capture.id, capture]));
           context.targets.forEach(({ id }) => {
@@ -1323,13 +1821,17 @@ async function downloadReviewPdf() {
 // CSS change of that viewport placed on it as a numbered marker.
 function reviewHtmlContexts() {
   const contexts = new Map();
-  const contextFor = ({ url, viewport }) => {
+  const contextFor = ({ url, viewport, steps }) => {
     const canonicalUrl = canonicalInspectorUrl(url || targetUrl);
     const width = Math.round(Number(viewport?.width) || 0);
     const height = Math.round(Number(viewport?.height) || 0);
-    const key = [canonicalUrl, width, height].join('\u0000');
+    // Each tab or panel of a page is captured on its own, after its
+    // recorded switches are clicked again.
+    const viewSteps = Array.isArray(steps) ? steps : [];
+    const key = [canonicalUrl, width, height, JSON.stringify(viewSteps.map((step) => step.element?.domPath || step.element?.selector || ''))].join('\u0000');
     if (!contexts.has(key)) {
-      contexts.set(key, { url: canonicalUrl, viewport: { width, height }, entries: [], targets: new Map() });
+      const state = viewSteps.length ? viewStepsLabel(viewSteps) : '';
+      contexts.set(key, { url: canonicalUrl, viewport: { width, height }, steps: viewSteps, state, entries: [], targets: new Map() });
     }
     return contexts.get(key);
   };
@@ -1337,12 +1839,19 @@ function reviewHtmlContexts() {
     const context = contextFor(source);
     const element = source.element || null;
     const selector = element?.selector || source.selector || '';
+    // A point placed by hand in a review wins over the recorded element,
+    // which may be missing or the wrong one of several look-alikes.
+    const pin = source.pin ? { x: Math.round(source.pin.x), y: Math.round(source.pin.y) } : null;
     let targetId = null;
-    if (element || selector) {
+    if (pin) {
+      targetId = `pin:${pin.x},${pin.y}`;
+      if (!context.targets.has(targetId)) context.targets.set(targetId, { element: null, selector: '', pin });
+    } else if (element || selector) {
       targetId = reviewElementKey(element, selector);
       if (!context.targets.has(targetId)) context.targets.set(targetId, { element, selector });
     }
-    context.entries.push({ ...entry, selector, targetId, order: context.entries.length });
+    const offset = !pin && source.offset && Number.isFinite(source.offset.x) && Number.isFinite(source.offset.y) ? source.offset : null;
+    context.entries.push({ ...entry, selector, element, pin, offset, targetId, order: context.entries.length });
   };
 
   comments.forEach((comment) => addEntry(comment, { kind: 'comment', text: comment.comment }));
@@ -1403,15 +1912,26 @@ function reviewHtmlViewport(context, pageIndex, viewportIndex, numberFrom) {
       shot
     };
     if (entry.kind === 'change') Object.assign(result, { property: entry.property, from: entry.from, to: entry.to });
+    // Kept so the review can be imported back without losing the binding.
+    if (entry.element) result.element = entry.element;
+    if (entry.pin) {
+      result.pin = entry.pin;
+      if (target === 'element') result.target = 'pin';
+    }
+    if (entry.offset) result.offset = entry.offset;
     if (rect) {
       const { width, height } = shots[shot];
-      const offset = markersPerTarget.get(entry.targetId) || 0;
-      markersPerTarget.set(entry.targetId, offset + 1);
+      // A marker moved within its element keeps that spot; others stack
+      // side by side on the element's corner.
+      const offset = entry.offset ? 0 : markersPerTarget.get(entry.targetId) || 0;
+      if (!entry.offset) markersPerTarget.set(entry.targetId, offset + 1);
+      const x = rect.x + (entry.offset ? Math.min(Math.max(entry.offset.x, 0), rect.width) : 0);
+      const y = rect.y + (entry.offset ? Math.min(Math.max(entry.offset.y, 0), rect.height) : 0);
       const inset = 13;
       result.rect = rect;
       result.marker = {
-        x: Math.min(Math.max(rect.x, inset), Math.max(inset, width - inset - (offset * 24))),
-        y: Math.min(Math.max(rect.y, inset), Math.max(inset, height - inset)),
+        x: Math.min(Math.max(x, inset), Math.max(inset, width - inset - (offset * 24))),
+        y: Math.min(Math.max(y, inset), Math.max(inset, height - inset)),
         offset
       };
     }
@@ -1420,6 +1940,7 @@ function reviewHtmlViewport(context, pageIndex, viewportIndex, numberFrom) {
   return {
     width: context.viewport.width,
     height: context.viewport.height,
+    ...(context.state ? { state: context.state, steps: context.steps } : {}),
     shots: shots.map((shot) => ({ src: shot.dataUrl, width: shot.width, height: shot.height, scrollY: shot.scrollY })),
     error: shots.length ? undefined : (context.captureError || 'Chrome did not return an image.'),
     entries
@@ -1505,8 +2026,9 @@ async function downloadReviewHtml() {
             height: context.viewport.height,
             // Screenshots show the live site as it is; edits are listed as before/after notes.
             changes: [],
-            targets: context.targets
-          }), 30000 + (context.targets.length * 12000), 'The page took too long to prepare.');
+            targets: context.targets,
+            steps: context.steps
+          }), 45000 + (context.targets.length * 12000), 'The page took too long to prepare.');
           if (!response?.ok) throw new Error(response?.error || 'Unable to capture this page.');
           context.shots = response.shots;
           context.unplaced = response.unplaced;
@@ -2317,6 +2839,8 @@ function render() {
     // Chromium. Only a genuinely new viewport is appended.
     if (!card.isConnected) grid.append(card);
   });
+  syncCommentMarkers();
+  if (!commentsPanel.hidden) renderComments();
 }
 
 form.addEventListener('submit', (event) => {
@@ -2352,7 +2876,14 @@ window.addEventListener('message', (event) => {
   }
   enableNavigationSync(card);
   if (!layersFrame) setLayersFrame(event.source);
+  // A fresh document has neither the comment picker nor markers, whatever
+  // was sent to the one it replaced.
+  commentPickerFrames.delete(card.querySelector('iframe'));
   if (!commentsPanel.hidden) setCommentPicker(true);
+  card.commentMarkersPayload = '';
+  card.replayedCommentId = null;
+  cardMarkerStatuses.delete(card);
+  syncCommentMarkers();
   reconcilePendingChanges(card);
 });
 
@@ -2360,7 +2891,9 @@ window.addEventListener('message', (event) => {
   if (event.data?.source !== 'viewport-parade' || event.data?.type !== 'studio-shortcut') return;
   const isPreview = [...document.querySelectorAll('.viewport-card iframe')].some((iframe) => iframe.contentWindow === event.source);
   const shortcut = String(event.data.shortcut || '').toLowerCase();
-  if (isPreview && ['i', 'c', 'l', 'v'].includes(shortcut)) handleStudioShortcut(shortcut);
+  if (isPreview && shortcut === 'escape') {
+    if (placingCommentId) setCommentPlacing(null);
+  } else if (isPreview && ['i', 'c', 'l', 'v'].includes(shortcut)) handleStudioShortcut(shortcut);
 });
 
 window.addEventListener('message', (event) => {
@@ -2436,9 +2969,60 @@ window.addEventListener('message', (event) => {
   if (event.data?.source !== 'viewport-parade' || event.data?.type !== 'inspector-element-selected') return;
   const card = cardForFrame(event.source);
   if (!card || !event.data.element) return;
+  if (placingCommentId && !commentsPanel.hidden) {
+    moveComment(placingCommentId, card, { element: event.data.element, route: event.data.route || '/', steps: event.data.steps });
+    clearInspectorSelections();
+    return;
+  }
   clearOtherInspectorSelections(event.source);
-  commentSelection = { frame: card.querySelector('iframe'), element: event.data.element, route: event.data.route || '/' };
+  commentSelection = { frame: card.querySelector('iframe'), element: event.data.element, route: event.data.route || '/', steps: Array.isArray(event.data.steps) ? event.data.steps : [] };
   if (!commentsPanel.hidden) renderComments();
+});
+
+window.addEventListener('message', (event) => {
+  if (event.data?.source !== 'viewport-parade' || event.data?.type !== 'comment-markers-status') return;
+  const card = cardForFrame(event.source);
+  if (!card || !Array.isArray(event.data.statuses)) return;
+  cardMarkerStatuses.set(card, new Map(event.data.statuses.map(({ id, state }) => [id, state])));
+  const pendingState = pendingFocusCommentId && cardMarkerStatuses.get(card).get(pendingFocusCommentId);
+  if (['placed', 'approx'].includes(pendingState)) {
+    event.source.postMessage({ source: 'viewport-parade', type: 'comment-marker-focus', id: pendingFocusCommentId }, '*');
+    pendingFocusCommentId = null;
+  } else if (pendingState === 'other-view' && card.replayedCommentId !== pendingFocusCommentId) {
+    // Opened the page for a comment on one of its tabs: switch to it too.
+    card.replayedCommentId = pendingFocusCommentId;
+    event.source.postMessage({ source: 'viewport-parade', type: 'comment-replay-steps', id: pendingFocusCommentId }, '*');
+  }
+  if (!commentsPanel.hidden) renderComments();
+});
+
+// An older comment turned up after the user switched a tab or opened a
+// popup: it keeps those steps, so the export and the list can reach it.
+window.addEventListener('message', (event) => {
+  if (event.data?.source !== 'viewport-parade' || event.data?.type !== 'comment-steps-learned') return;
+  const card = cardForFrame(event.source);
+  const comment = commentById(event.data.id);
+  if (!card || !comment || comment.steps?.length || !commentShownOnCard(comment, card)) return;
+  if (!Array.isArray(event.data.steps) || !event.data.steps.length) return;
+  comment.steps = event.data.steps;
+  saveComments();
+  syncCommentMarkers();
+  if (!commentsPanel.hidden) renderComments();
+  speak(`Comment ${comments.indexOf(comment) + 1} now remembers the “${viewStepsLabel(comment.steps)}” view.`);
+});
+
+window.addEventListener('message', (event) => {
+  if (event.data?.source !== 'viewport-parade' || event.data?.type !== 'comment-marker-activated') return;
+  if (!cardForFrame(event.source) || commentsPanel.hidden) return;
+  selectComment(event.data.id, { reveal: true });
+});
+
+window.addEventListener('message', (event) => {
+  if (event.data?.source !== 'viewport-parade' || event.data?.type !== 'comment-marker-moved') return;
+  const card = cardForFrame(event.source);
+  if (!card || commentsPanel.hidden) return;
+  moveComment(event.data.id, card, { element: event.data.element, pin: event.data.pin, route: event.data.route, offset: event.data.offset, same: Boolean(event.data.same), steps: event.data.steps });
+  commentsList.querySelector(`[data-comment-id="${event.data.id}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 });
 
 window.addEventListener('message', (event) => {
@@ -2517,13 +3101,229 @@ window.addEventListener('keydown', (event) => {
 });
 
 commentsList.addEventListener('click', (event) => {
-  const button = event.target.closest('.comment-remove');
-  const index = Number(button?.dataset.commentIndex);
-  if (!Number.isInteger(index) || !comments[index]) return;
-  comments.splice(index, 1);
+  const groupKey = event.target.closest('.comment-group')?.dataset.groupKey;
+  if (groupKey && event.target.closest('.comment-group-toggle')) {
+    const group = commentGroups().find((candidate) => candidate.key === groupKey);
+    if (group) commentGroupExpanded.set(groupKey, !isCommentGroupExpanded(group));
+    renderComments();
+    return;
+  }
+  const item = event.target.closest('.comment-item');
+  const id = item?.dataset.commentId;
+  const comment = id && commentById(id);
+  if (!comment) return;
+  const action = event.target.closest('[data-action]')?.dataset.action;
+  if (action === 'menu') {
+    openCommentMenuId = openCommentMenuId === id ? null : id;
+    renderComments();
+    return;
+  }
+  if (openCommentMenuId) {
+    openCommentMenuId = null;
+    if (!action) {
+      renderComments();
+      return;
+    }
+  }
+  if (action === 'edit') {
+    startCommentEdit(id);
+    return;
+  }
+  if (action === 'edit-save') {
+    saveCommentEdit();
+    return;
+  }
+  if (action === 'edit-cancel') {
+    stopCommentEdit();
+    return;
+  }
+  // Clicks inside the editor are for the text, not for selecting the comment.
+  if (event.target.closest('.comment-edit')) return;
+  if (action === 'delete') {
+    if (editingCommentId === id) editingCommentId = null;
+    comments.splice(comments.indexOf(comment), 1);
+    if (selectedCommentId === id) selectedCommentId = null;
+    if (placingCommentId === id) placingCommentId = null;
+    if (pendingFocusCommentId === id) pendingFocusCommentId = null;
+    saveComments();
+    renderComments();
+    syncChangeUi();
+    syncCommentMarkers();
+    notify('Comment removed from the pending handoff.');
+    return;
+  }
+  if (action === 'move') {
+    setCommentPlacing(id);
+    return;
+  }
+  const placement = commentPlacement(comment);
+  if (placement === 'other-view') {
+    // Switch the preview to the tab the comment was left in, then focus it.
+    selectedCommentId = id;
+    pendingFocusCommentId = id;
+    document.querySelectorAll('.viewport-card').forEach((card) => {
+      if (!commentShownOnCard(comment, card)) return;
+      // Once per document: the status that follows must not replay again.
+      card.replayedCommentId = id;
+      card.querySelector('iframe')?.contentWindow?.postMessage({ source: 'viewport-parade', type: 'comment-replay-steps', id }, '*');
+    });
+    renderComments();
+    syncCommentMarkers();
+    return;
+  }
+  if (placement === 'other-page' || placement === 'other-viewport') {
+    // Bring up the comment's page and width; its marker is focused once
+    // that preview reports it.
+    selectedCommentId = id;
+    pendingFocusCommentId = id;
+    if (placement === 'other-page') openPreviewUrl(comment.url, true);
+    if (canonicalInspectorUrl(targetUrl) !== canonicalInspectorUrl(comment.url)) {
+      pendingFocusCommentId = null;
+    } else if (![...document.querySelectorAll('.viewport-card')].some((card) => commentShownOnCard(comment, card))) {
+      showCommentViewport(comment);
+    }
+    renderComments();
+    return;
+  }
+  selectComment(id, { focus: true });
+});
+function startCommentEdit(id) {
+  const comment = commentById(id);
+  if (!comment) return;
+  editingCommentId = id;
+  editingCommentDraft = comment.comment;
+  if (placingCommentId) placingCommentId = null;
+  renderComments();
+  const editor = commentsList.querySelector('.comment-edit-input');
+  editor?.focus();
+  editor?.setSelectionRange(editor.value.length, editor.value.length);
+}
+
+function stopCommentEdit() {
+  editingCommentId = null;
+  editingCommentDraft = '';
+  renderComments();
+}
+
+function saveCommentEdit() {
+  const comment = editingCommentId && commentById(editingCommentId);
+  const text = editingCommentDraft.trim();
+  if (!comment || !text) return;
+  const changed = comment.comment !== text;
+  comment.comment = text;
+  editingCommentId = null;
+  editingCommentDraft = '';
+  if (changed) saveComments();
+  renderComments();
+  syncCommentMarkers();
+  if (changed) notify(`Comment ${comments.indexOf(comment) + 1} updated.`, 'success');
+}
+
+commentsList.addEventListener('input', (event) => {
+  if (!event.target.classList.contains('comment-edit-input')) return;
+  editingCommentDraft = event.target.value;
+  const save = event.target.closest('.comment-edit')?.querySelector('[data-action="edit-save"]');
+  if (save) save.disabled = !editingCommentDraft.trim();
+});
+commentsList.addEventListener('keydown', (event) => {
+  if (!event.target.classList.contains('comment-edit-input')) return;
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    event.stopPropagation();
+    stopCommentEdit();
+  } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+    event.preventDefault();
+    saveCommentEdit();
+  }
+});
+// Adds a preview at the comment's width, reusing a device of that width or
+// making a custom one. In single-viewport mode the one preview switches.
+function showCommentViewport(comment) {
+  const { width, height } = comment.viewport;
+  let id = Object.keys(DEVICES).find((key) => DEVICES[key].width === width);
+  if (!id) {
+    id = `custom-${++customDeviceCount}`;
+    DEVICES[id] = { name: 'Custom', width, height };
+  }
+  if (mode === 'single') {
+    selected = new Set([id]);
+    singleWidth = width;
+  } else {
+    selected.add(id);
+  }
+  render();
+  speak(`Opened the ${width} px viewport.`);
+}
+
+// A click anywhere outside the open menu closes it.
+document.addEventListener('pointerdown', (event) => {
+  if (!openCommentMenuId || (event.target instanceof Element && event.target.closest('.comment-menu, .comment-more'))) return;
+  openCommentMenuId = null;
+  renderComments();
+}, true);
+window.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape' || (!placingCommentId && !openCommentMenuId)) return;
+  event.preventDefault();
+  if (openCommentMenuId) {
+    openCommentMenuId = null;
+    renderComments();
+  } else {
+    setCommentPlacing(null);
+  }
+});
+function setCommentsMenuOpen(open) {
+  commentsMenuOpen = open;
+  commentsMenu.hidden = !open;
+  commentsMenuToggle.setAttribute('aria-expanded', String(open));
+}
+
+function deleteAllComments() {
+  if (!comments.length) return;
+  const count = comments.length;
+  if (!window.confirm(`Delete all ${count} comment${count === 1 ? '' : 's'} on every page?\n\nThis cannot be undone.`)) return;
+  comments.splice(0);
+  selectedCommentId = null;
+  placingCommentId = null;
+  pendingFocusCommentId = null;
+  openCommentMenuId = null;
+  editingCommentId = null;
+  saveComments();
   renderComments();
   syncChangeUi();
-  notify('Comment removed from the pending handoff.');
+  syncCommentMarkers();
+  notify(`${count} comment${count === 1 ? '' : 's'} deleted.`);
+}
+
+commentsMenuToggle.addEventListener('click', () => setCommentsMenuOpen(!commentsMenuOpen));
+document.addEventListener('pointerdown', (event) => {
+  if (commentsMenuOpen && !(event.target instanceof Element && event.target.closest('#comments-menu, #comments-menu-toggle'))) setCommentsMenuOpen(false);
+}, true);
+window.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape' || !commentsMenuOpen) return;
+  event.preventDefault();
+  setCommentsMenuOpen(false);
+  commentsMenuToggle.focus();
+});
+commentsMenuDeleteAll.addEventListener('click', () => {
+  setCommentsMenuOpen(false);
+  deleteAllComments();
+});
+commentsImportButton.addEventListener('click', () => {
+  setCommentsMenuOpen(false);
+  commentsImportInput.click();
+});
+commentsImportInput.addEventListener('change', async () => {
+  const [file] = commentsImportInput.files || [];
+  commentsImportInput.value = '';
+  if (!file) return;
+  commentsMenuToggle.disabled = true;
+  try {
+    await importReviewFile(file);
+  } catch (error) {
+    notify(`Review was not imported: ${error.message}`, 'error');
+  } finally {
+    commentsMenuToggle.disabled = false;
+  }
 });
 layersTree.addEventListener('click', (event) => {
   const item = event.target.closest('.layers-node');
@@ -2673,5 +3473,6 @@ window.addEventListener('pointerup', () => {
 window.addEventListener('resize', () => { if (mode === 'single') render(); });
 
 render();
+restoreComments();
 syncChangeUi();
 checkFileSchemeAccess();

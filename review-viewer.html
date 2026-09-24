@@ -40,6 +40,12 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
 .progress { display: flex; align-items: center; gap: 10px; flex: none; color: var(--muted); font-size: 11px; font-weight: 600; }
 .progress-bar { width: 120px; height: 4px; overflow: hidden; border-radius: 999px; background: var(--hover); }
 .progress-bar i { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--done); transition: width 200ms ease; }
+.topbar-actions { display: flex; align-items: center; gap: 16px; flex: none; }
+.save-file { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid var(--ink); border-radius: 6px; background: var(--ink); color: #fff; font-size: 11px; font-weight: 700; }
+.save-file:hover:not(:disabled) { background: #3f3f46; }
+.save-file i { width: 6px; height: 6px; border-radius: 999px; background: #fca5a5; }
+.save-file:disabled { border-color: transparent; background: transparent; color: var(--muted); cursor: default; }
+.save-file:disabled i { display: none; }
 
 .layout { display: grid; grid-template-columns: 248px minmax(0, 1fr) 320px; min-height: 0; }
 .panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; background: #fff; }
@@ -65,7 +71,11 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
 .page-item.is-complete .page-item-count { color: var(--done); }
 .page-item[aria-current="true"].is-complete .page-item-count { color: #86efac; }
 
-.stage-wrap { display: grid; grid-template-rows: 44px minmax(0, 1fr); min-width: 0; min-height: 0; background: var(--stage); }
+.stage-wrap { position: relative; display: grid; grid-template-rows: 44px minmax(0, 1fr); min-width: 0; min-height: 0; background: var(--stage); }
+.place-hint { position: absolute; top: 56px; left: 50%; z-index: 5; display: flex; align-items: center; gap: 10px; max-width: calc(100% - 24px); padding: 6px 6px 6px 12px; border-radius: 6px; background: var(--ink); color: #fff; box-shadow: 0 6px 20px rgba(24, 24, 27, .25); font-size: 11px; font-weight: 600; transform: translateX(-50%); }
+.place-hint button { height: 24px; padding: 0 8px; border: 0; border-radius: 4px; background: rgba(255, 255, 255, .14); color: #fff; font-size: 11px; font-weight: 700; }
+.place-hint button:hover { background: rgba(255, 255, 255, .24); }
+.stage.is-placing .canvas, .stage.is-placing .marker { cursor: crosshair; }
 .toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px; padding: 0 12px; border-bottom: 1px solid var(--line); background: #fff; }
 .stage-title { grid-column: 1; display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .stage-title a { overflow: hidden; color: var(--ink); font-size: 12px; font-weight: 700; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
@@ -126,6 +136,11 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
 .comment-check svg { width: 12px; height: 12px; fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; opacity: 0; }
 .comment-check[aria-checked="true"] i { border-color: var(--done); background: var(--done); }
 .comment-check[aria-checked="true"] svg { opacity: 1; }
+.comment-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.comment-action { height: 24px; padding: 0 8px; border: 1px solid var(--line); border-radius: 4px; background: #fff; color: var(--ink); font-size: 11px; font-weight: 700; }
+.comment-action:hover { background: var(--hover); }
+.comment-action.is-primary { border-color: var(--ink); background: var(--ink); color: #fff; }
+.comment-action.is-primary:hover { background: #3f3f46; }
 .empty-note { margin: 4px 0 0; color: var(--muted); font-size: 11px; font-weight: 500; }
 .footer-note { padding: 10px 12px; border-top: 1px solid var(--line); color: var(--faint); font-size: 10px; font-weight: 600; }
 
@@ -145,7 +160,10 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
       <div class="brand-logo" id="brand-logo"></div>
       <div class="brand-text"><strong id="brand-name"></strong><span id="brand-meta"></span></div>
     </div>
-    <div class="progress" aria-live="polite"><span id="progress-label"></span><div class="progress-bar"><i id="progress-fill"></i></div></div>
+    <div class="topbar-actions">
+      <div class="progress" aria-live="polite"><span id="progress-label"></span><div class="progress-bar"><i id="progress-fill"></i></div></div>
+      <button type="button" class="save-file" id="save-file" hidden><i aria-hidden="true"></i><span></span></button>
+    </div>
   </header>
   <div class="layout">
     <aside class="panel pages-panel" aria-labelledby="pages-title">
@@ -169,6 +187,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
           <button type="button" id="zoom-actual" aria-pressed="false" title="Actual size (1)">100%</button>
         </div>
       </div>
+      <div class="place-hint" id="place-hint" role="status" hidden><span id="place-hint-text"></span><button type="button" id="place-cancel">Cancel</button></div>
       <div class="stage" id="stage" tabindex="-1">
         <div class="canvas" id="canvas" hidden><img id="screenshot" alt=""><div class="overlay" id="overlay"></div></div>
         <div class="stage-empty" id="stage-empty" hidden></div>
@@ -184,20 +203,40 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
 <script type="application/json" id="pixelprism-review-data">{{PIXELPRISM_REVIEW_DATA}}</script>
 <script>
 (() => {
+  // Captured before rendering touches the DOM; saving writes this markup
+  // back into the same file with the updated data.
+  const PRISTINE_HTML = `<!doctype html>\n${document.documentElement.outerHTML}`;
   const data = JSON.parse(document.getElementById('pixelprism-review-data').textContent);
   const $ = (selector) => document.querySelector(selector);
   const ZOOM_STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4];
   const STORAGE_KEY = `pixelprism-review:${data.id}`;
+  const PINS_KEY = `pixelprism-review-pins:${data.id}`;
   const CHECK_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg>';
 
-  const state = { page: 0, viewport: 0, shot: 0, selected: null, zoom: 1, fit: true, done: new Set() };
+  const state = { page: 0, viewport: 0, shot: 0, selected: null, placing: null, zoom: 1, fit: true, done: new Set(), unsaved: false };
+  // Checkmarks and points not yet written into the file live in
+  // localStorage; once the file is saved, the file is the source of truth.
+  const resolvedKey = (ids) => JSON.stringify([...ids].sort());
   try {
-    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const stored = raw === null ? data.resolved : JSON.parse(raw);
     if (Array.isArray(stored)) stored.forEach((id) => state.done.add(id));
+    if (raw !== null && resolvedKey(state.done) !== resolvedKey(data.resolved || [])) state.unsaved = true;
   } catch { /* Storage can be unavailable for file:// pages; checkmarks then last for the session. */ }
 
   const saveDone = () => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify([...state.done])); } catch { /* See above. */ }
+  };
+  // Points placed by hand, by entry id: { shot, x, y } in screenshot pixels,
+  // or null for a point that was removed. Kept until they are written into
+  // the file, so closing the tab never loses work.
+  let pinDraft = {};
+  try {
+    const stored = JSON.parse(localStorage.getItem(PINS_KEY) || '{}');
+    if (stored && typeof stored === 'object' && !Array.isArray(stored)) pinDraft = stored;
+  } catch { /* See above. */ }
+  const savePinDraft = () => {
+    try { localStorage.setItem(PINS_KEY, JSON.stringify(pinDraft)); } catch { /* See above. */ }
   };
   const el = (tag, className, text) => {
     const node = document.createElement(tag);
@@ -217,12 +256,57 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     }
     return null;
   };
-  const viewportLabel = (viewport) => `${viewport.width} × ${viewport.height}`;
+  // A page captured in one of its tabs is named after it: 1440 × 900 · Active.
+  const viewportLabel = (viewport) => `${viewport.width} × ${viewport.height}${viewport.state ? ` · ${viewport.state}` : ''}`;
   const currentShot = () => currentViewport().shots[state.shot] || null;
   const captureLabel = (viewport) => {
     if (!viewport.shots.length) return 'No screenshot';
     return viewport.shots.length === 1 ? '1 screen' : `${viewport.shots.length} screens`;
   };
+
+  // Manual points. The automatic placement is kept in entry.auto so a point
+  // can be undone; entry.pin is in page coordinates so the studio can put it
+  // on a fresh screenshot after the review is imported back.
+  const PLACEMENT_FIELDS = ['target', 'shot', 'rect', 'marker'];
+  function applyPin(entry, viewport, shotIndex, x, y) {
+    const shot = viewport.shots[shotIndex];
+    if (!shot) return false;
+    const px = Math.round(Math.min(Math.max(x, 0), shot.width));
+    const py = Math.round(Math.min(Math.max(y, 0), shot.height));
+    if (!entry.auto && !entry.pin) {
+      entry.auto = {};
+      PLACEMENT_FIELDS.forEach((field) => { if (entry[field] !== undefined) entry.auto[field] = entry[field]; });
+    }
+    entry.pin = { x: px, y: Math.round(py + (shot.scrollY || 0)) };
+    entry.target = 'pin';
+    entry.shot = shotIndex;
+    entry.rect = { x: px, y: py, width: 0, height: 0 };
+    entry.marker = { x: px, y: py, offset: 0 };
+    return true;
+  }
+  function removePin(entry) {
+    if (!entry.pin) return false;
+    delete entry.pin;
+    PLACEMENT_FIELDS.forEach((field) => { delete entry[field]; });
+    if (entry.auto) {
+      Object.assign(entry, entry.auto);
+      delete entry.auto;
+    } else {
+      // The point came with the export; without it the comment is unplaced.
+      entry.target = 'missing';
+      entry.shot = 0;
+    }
+    return true;
+  }
+  const placementKey = (entry) => JSON.stringify([entry.target, entry.shot, entry.pin]);
+  Object.entries(pinDraft).forEach(([id, pin]) => {
+    const found = findEntry(id);
+    if (!found) return;
+    const before = placementKey(found.entry);
+    if (pin) applyPin(found.entry, data.pages[found.pageIndex].viewports[found.viewportIndex], pin.shot, pin.x, pin.y);
+    else removePin(found.entry);
+    if (placementKey(found.entry) !== before) state.unsaved = true;
+  });
 
   // Header
   const logo = $('#brand-logo');
@@ -278,10 +362,33 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
 
   function entryMeta(entry) {
     if (entry.target === 'page') return 'Whole page';
+    if (entry.target === 'pin') return 'Point placed by hand';
     const selector = entry.selector || 'Element';
     if (entry.target === 'missing') return `${selector} · not found on the captured page`;
     if (entry.target === 'hidden') return `${selector} · not visible on the captured page`;
     return selector;
+  }
+
+  function placeLabel(entry) {
+    return entry.target === 'pin' ? 'Move point' : 'Place on screenshot';
+  }
+
+  function renderSave() {
+    const button = $('#save-file');
+    const label = button.querySelector('span');
+    const status = save.status;
+    button.hidden = !state.unsaved && status !== 'saved';
+    button.disabled = status === 'saving' || status === 'saved' || status === 'unsupported';
+    if (status === 'saving') label.textContent = 'Saving...';
+    else if (status === 'saved') label.textContent = 'Saved';
+    else if (status === 'unsupported') label.textContent = 'Kept in this browser';
+    else if (status === 'error') label.textContent = 'Save failed · Retry';
+    else label.textContent = 'Save to file';
+    button.title = ({
+      unsupported: 'Saving into the file needs Chrome or Edge. Changes stay in this browser.',
+      error: save.error || 'The file could not be written.',
+      saved: 'Changes are saved into this file.'
+    })[status] || `Pick this file (${reviewFileName()}) once. After that, changes are saved into it automatically.`;
   }
 
   function renderComments() {
@@ -316,6 +423,27 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
         const paragraph = el('p');
         entryText(entry, paragraph);
         body.append(paragraph, el('small', '', entryMeta(entry)));
+        // Only comments without a place get placement actions; bound
+        // comments and whole-page notes are already where they belong.
+        const placeable = ['missing', 'hidden', 'pin'].includes(entry.target);
+        if (entry.id === state.selected && viewport.shots.length && placeable) {
+          const actions = el('div', 'comment-actions');
+          const placing = state.placing === entry.id;
+          const place = el('button', 'comment-action', placing ? 'Cancel' : placeLabel(entry));
+          place.type = 'button';
+          place.dataset.action = placing ? 'cancel' : 'place';
+          place.dataset.entry = entry.id;
+          place.classList.toggle('is-primary', !placing && entry.target !== 'pin');
+          actions.append(place);
+          if (entry.pin && !placing) {
+            const reset = el('button', 'comment-action', entry.auto ? 'Undo point' : 'Remove point');
+            reset.type = 'button';
+            reset.dataset.action = 'reset';
+            reset.dataset.entry = entry.id;
+            actions.append(reset);
+          }
+          body.append(actions);
+        }
         const check = el('button', 'comment-check');
         check.type = 'button';
         check.dataset.check = entry.id;
@@ -394,7 +522,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     if (!shot) return;
     const onShot = viewport.entries.filter((entry) => entry.shot === state.shot);
     const selected = onShot.find((entry) => entry.id === state.selected);
-    if (selected?.rect) {
+    if (selected?.rect?.width && selected.rect.height) {
       const highlight = el('div', 'highlight');
       highlight.style.left = percent(selected.rect.x, shot.width);
       highlight.style.top = percent(selected.rect.y, shot.height);
@@ -451,6 +579,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
   }
 
   function render() {
+    renderSave();
     renderProgress();
     renderPages();
     renderComments();
@@ -472,8 +601,202 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     item?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 
+  function stopPlacing() {
+    if (!state.placing) return;
+    state.placing = null;
+    stage.classList.remove('is-placing');
+    $('#place-hint').hidden = true;
+  }
+
+  function startPlacing(id) {
+    const found = findEntry(id);
+    if (!found) return;
+    const viewport = data.pages[found.pageIndex].viewports[found.viewportIndex];
+    if (!viewport.shots.length) return;
+    if (state.selected !== id) selectEntry(id);
+    state.placing = id;
+    stage.classList.add('is-placing');
+    const screens = viewport.shots.length > 1 ? ' Use [ and ] to switch screens.' : '';
+    $('#place-hint-text').textContent = `Click where comment ${found.entry.number} belongs.${screens}`;
+    $('#place-hint').hidden = false;
+    renderComments();
+    stage.focus({ preventScroll: true });
+  }
+
+  function cancelPlacing() {
+    if (!state.placing) return;
+    stopPlacing();
+    renderComments();
+  }
+
+  function placeAt(event) {
+    const found = findEntry(state.placing);
+    const shot = currentShot();
+    if (!found || !shot) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / state.zoom;
+    const y = (event.clientY - rect.top) / state.zoom;
+    const id = state.placing;
+    stopPlacing();
+    if (!applyPin(found.entry, currentViewport(), state.shot, x, y)) return;
+    pinDraft[id] = { shot: state.shot, x: found.entry.marker.x, y: found.entry.marker.y };
+    savePinDraft();
+    markChanged();
+    state.selected = id;
+    render();
+    renderOverlay();
+  }
+
+  function resetPlacement(id) {
+    const found = findEntry(id);
+    if (!found || !removePin(found.entry)) return;
+    pinDraft[id] = null;
+    savePinDraft();
+    markChanged();
+    stopPlacing();
+    const shotCount = currentViewport().shots.length;
+    state.shot = Math.min(found.entry.shot || 0, Math.max(0, shotCount - 1));
+    render();
+    renderStage();
+  }
+
+  function reviewFileName() {
+    try {
+      return decodeURIComponent(location.pathname.split('/').pop() || '') || 'the review file';
+    } catch {
+      return 'the review file';
+    }
+  }
+
+  function reviewHtml() {
+    const snapshot = { ...data, resolved: [...state.done] };
+    // Keep the embedded JSON from closing its <script> element early.
+    const json = JSON.stringify(snapshot)
+      .replace(/</g, '\\u003c')
+      .replace(/\u2028/g, '\\u2028')
+      .replace(/\u2029/g, '\\u2029');
+    return PRISTINE_HTML.replace(
+      /(<script type="application\/json" id="pixelprism-review-data">)[\s\S]*?(<\/script>)/,
+      (match, open, close) => open + json + close
+    );
+  }
+
+  // A page cannot write to its own file on its own: the viewer asks for this
+  // file once through the file picker, then keeps the handle (IndexedDB) and
+  // writes every change into it.
+  const save = { status: 'idle', error: '', version: 0, handle: null, running: false, again: false, timer: null, hideTimer: null };
+  const canSaveToFile = typeof window.showOpenFilePicker === 'function';
+
+  function handleStore(mode, action) {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open('pixelprism-review-files', 1);
+      request.onupgradeneeded = () => request.result.createObjectStore('handles');
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const db = request.result;
+        const transaction = db.transaction('handles', mode);
+        const operation = action(transaction.objectStore('handles'));
+        transaction.oncomplete = () => { db.close(); resolve(operation.result); };
+        transaction.onerror = () => { db.close(); reject(transaction.error); };
+      };
+    });
+  }
+
+  function reviewIdOf(html) {
+    const parsed = new DOMParser().parseFromString(html, 'text/html');
+    try {
+      return JSON.parse(parsed.getElementById('pixelprism-review-data')?.textContent || '{}').id;
+    } catch {
+      return undefined;
+    }
+  }
+
+  async function writableHandle(interactive) {
+    if (!save.handle) save.handle = await handleStore('readonly', (store) => store.get(data.id)).catch(() => null);
+    if (save.handle) {
+      if (await save.handle.queryPermission({ mode: 'readwrite' }) === 'granted') return save.handle;
+      if (!interactive) return null;
+      return await save.handle.requestPermission({ mode: 'readwrite' }) === 'granted' ? save.handle : null;
+    }
+    if (!interactive) return null;
+    const [picked] = await window.showOpenFilePicker({
+      id: 'pixelprism-review',
+      startIn: 'downloads',
+      types: [{ description: 'Design review', accept: { 'text/html': ['.html', '.htm'] } }]
+    });
+    if (reviewIdOf(await (await picked.getFile()).text()) !== data.id) {
+      throw new Error(`That is a different review. Pick ${reviewFileName()}, the file open in this tab.`);
+    }
+    save.handle = picked;
+    handleStore('readwrite', (store) => store.put(picked, data.id)).catch(() => {});
+    // The picker may use up the click; the next click then asks for access.
+    const permission = await picked.requestPermission({ mode: 'readwrite' }).catch(() => 'prompt');
+    return permission === 'granted' ? picked : null;
+  }
+
+  async function saveToFile(interactive) {
+    if (!state.unsaved) return;
+    if (!canSaveToFile) {
+      save.status = 'unsupported';
+      renderSave();
+      return;
+    }
+    if (save.running) {
+      save.again = true;
+      return;
+    }
+    save.running = true;
+    const version = save.version;
+    clearTimeout(save.hideTimer);
+    save.status = 'saving';
+    renderSave();
+    try {
+      const handle = await writableHandle(interactive);
+      if (!handle) {
+        save.status = 'idle';
+        return;
+      }
+      const writable = await handle.createWritable();
+      await writable.write(reviewHtml());
+      await writable.close();
+      if (version === save.version) {
+        state.unsaved = false;
+        pinDraft = {};
+        try {
+          localStorage.removeItem(PINS_KEY);
+          localStorage.removeItem(STORAGE_KEY);
+        } catch { /* Nothing to clean up. */ }
+      }
+      save.status = 'saved';
+      save.hideTimer = setTimeout(() => {
+        if (save.status === 'saved') save.status = 'idle';
+        renderSave();
+      }, 1800);
+    } catch (error) {
+      save.status = error?.name === 'AbortError' ? 'idle' : 'error';
+      save.error = error?.message || '';
+    } finally {
+      save.running = false;
+      renderSave();
+      if (save.again || (state.unsaved && save.status === 'saved')) {
+        save.again = false;
+        saveToFile(false);
+      }
+    }
+  }
+
+  function markChanged() {
+    state.unsaved = true;
+    save.version += 1;
+    if (save.status === 'saved') save.status = 'idle';
+    renderSave();
+    clearTimeout(save.timer);
+    save.timer = setTimeout(() => saveToFile(false), 400);
+  }
+
   function selectPage(index) {
     if (index === state.page) return;
+    stopPlacing();
     state.page = index;
     state.viewport = 0;
     state.shot = 0;
@@ -485,6 +808,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
 
   function selectViewport(index) {
     if (index === state.viewport) return;
+    stopPlacing();
     state.viewport = index;
     state.shot = 0;
     state.selected = null;
@@ -495,6 +819,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
   function selectEntry(id, { fromMarker = false } = {}) {
     const found = findEntry(id);
     if (!found) return;
+    if (state.placing && state.placing !== id) stopPlacing();
     const pageChanged = found.pageIndex !== state.page;
     const viewportChanged = pageChanged || found.viewportIndex !== state.viewport || found.entry.shot !== state.shot;
     state.page = found.pageIndex;
@@ -515,13 +840,15 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     if (index < 0 || index >= count || index === state.shot) return;
     state.shot = index;
     const selected = currentViewport().entries.find((entry) => entry.id === state.selected);
-    if (selected && selected.shot !== index) state.selected = null;
+    // While placing, the comment stays selected on every screen.
+    if (selected && selected.shot !== index && !state.placing) state.selected = null;
     renderComments();
     renderStage();
   }
 
   function clearSelection() {
     if (!state.selected) return;
+    stopPlacing();
     state.selected = null;
     renderComments();
     renderOverlay();
@@ -531,6 +858,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     if (state.done.has(id)) state.done.delete(id);
     else state.done.add(id);
     saveDone();
+    markChanged();
     render();
     renderOverlay();
   }
@@ -550,6 +878,13 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
   });
 
   $('#comments-groups').addEventListener('click', (event) => {
+    const action = event.target.closest('[data-action]');
+    if (action) {
+      if (action.dataset.action === 'place') startPlacing(action.dataset.entry);
+      else if (action.dataset.action === 'cancel') cancelPlacing();
+      else if (action.dataset.action === 'reset') resetPlacement(action.dataset.entry);
+      return;
+    }
     const check = event.target.closest('[data-check]');
     if (check) {
       toggleDone(check.dataset.check);
@@ -572,6 +907,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
   });
 
   overlay.addEventListener('click', (event) => {
+    // While placing, a click on a marker is a click on the screenshot.
+    if (state.placing) return;
     const marker = event.target.closest('.marker');
     if (marker) {
       event.stopPropagation();
@@ -582,7 +919,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
   let drag = null;
   let dragMoved = false;
   stage.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0 || event.target.closest('.marker')) return;
+    if (event.button !== 0 || (event.target.closest('.marker') && !state.placing)) return;
     drag = { x: event.clientX, y: event.clientY, left: stage.scrollLeft, top: stage.scrollTop };
     dragMoved = false;
   });
@@ -601,7 +938,12 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     stage.classList.remove('is-dragging');
   });
   stage.addEventListener('click', (event) => {
-    if (dragMoved || event.target.closest('.marker')) return;
+    if (dragMoved) return;
+    if (state.placing) {
+      if (event.target.closest('#canvas')) placeAt(event);
+      return;
+    }
+    if (event.target.closest('.marker')) return;
     clearSelection();
   });
 
@@ -613,6 +955,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     applyZoom(Math.min(4, Math.max(0.25, state.zoom * factor)), { x: event.clientX, y: event.clientY });
   }, { passive: false });
 
+  $('#place-cancel').addEventListener('click', cancelPlacing);
+  $('#save-file').addEventListener('click', () => saveToFile(true));
   $('#shot-prev').addEventListener('click', () => selectShot(state.shot - 1));
   $('#shot-next').addEventListener('click', () => selectShot(state.shot + 1));
   $('#zoom-in').addEventListener('click', () => stepZoom(1));
@@ -629,7 +973,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     else if (event.key === '-' || event.key === '_') { event.preventDefault(); stepZoom(-1); }
     else if (event.key === '0' && !event.altKey) { event.preventDefault(); setFit(); }
     else if (event.key === '1' && !modifier) actualSize();
-    else if (event.key === 'Escape') clearSelection();
+    else if (event.key === 'Escape') { if (state.placing) cancelPlacing(); else clearSelection(); }
     else if (event.key === '[') selectShot(state.shot - 1);
     else if (event.key === ']') selectShot(state.shot + 1);
     else if (!modifier && (event.key === 'ArrowDown' || event.key === 'j')) { event.preventDefault(); moveSelection(1); }
@@ -640,6 +984,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
 
   render();
   renderStage();
+  // Work left from an earlier visit goes into the file as soon as access allows.
+  if (state.unsaved) saveToFile(false);
 })();
 </script>
 </body>

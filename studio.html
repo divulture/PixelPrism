@@ -96,7 +96,15 @@
         <button type="submit">Add</button>
       </form>
       <section class="comments-list-wrap" aria-labelledby="comments-list-title">
-        <h3 id="comments-list-title">Pending notes</h3>
+        <div class="comments-list-header">
+          <h3 id="comments-list-title">Pending notes</h3>
+          <button type="button" class="comments-menu-toggle tooltip-trigger" id="comments-menu-toggle" aria-label="Comment actions" data-tooltip="Comment actions" aria-haspopup="menu" aria-expanded="false" aria-controls="comments-menu"><span data-phosphor-icon="dots-three"></span></button>
+          <div class="comment-menu comments-menu" id="comments-menu" role="menu" hidden>
+            <button type="button" role="menuitem" id="comments-import" title="Bring back comments from an exported HTML review"><span data-phosphor-icon="upload-simple"></span>Import review</button>
+            <button type="button" role="menuitem" id="comments-delete-all" class="is-danger"><span data-phosphor-icon="trash"></span>Delete all comments</button>
+          </div>
+          <input type="file" id="comments-import-input" accept=".html,text/html" hidden>
+        </div>
         <ol class="comments-list" id="comments-list"></ol>
         <p class="comments-empty" id="comments-empty">No comments added yet.</p>
       </section>
@@ -138,7 +146,7 @@
               <span data-phosphor-icon="floppy-disk"></span>
             </button>
             <details class="more-actions">
-              <summary class="tooltip-trigger" aria-label="More actions" data-tooltip="More actions"><span data-phosphor-icon="dots-three-outline"></span></summary>
+              <summary class="tooltip-trigger" aria-label="More actions" data-tooltip="More actions"><span data-phosphor-icon="dots-three"></span></summary>
               <div class="more-actions-menu">
                 <button class="refresh-button" type="button">Refresh page</button>
                 <button class="solo-button" type="button">Switch to View</button>

@@ -422,10 +422,83 @@ async function waitForReviewCaptureReady(debuggee) {
   await pause(160);
 }
 
+// Counts in-flight requests of the review tab. Must start before navigation
+// so the page's own API calls are seen from the first request.
+function trackReviewNetwork(debuggee) {
+  const pending = new Map();
+  let lastActivity = Date.now();
+  const onEvent = (source, method, params) => {
+    if (source.tabId !== debuggee.tabId || !params?.requestId) return;
+    if (method === 'Network.requestWillBeSent') {
+      // Streams never finish; they must not hold the capture back.
+      if (params.type === 'WebSocket' || params.type === 'EventSource') return;
+      pending.set(params.requestId, Date.now());
+      lastActivity = Date.now();
+    } else if (method === 'Network.loadingFinished' || method === 'Network.loadingFailed') {
+      if (pending.delete(params.requestId)) lastActivity = Date.now();
+    }
+  };
+  chrome.debugger.onEvent.addListener(onEvent);
+  return {
+    // Idle like "networkidle": nothing in flight for a moment, or only a
+    // couple of long-lived requests (long polling, analytics) left alone.
+    isIdle() {
+      const quiet = Date.now() - lastActivity;
+      return (pending.size === 0 && quiet >= 500) || (pending.size <= 2 && quiet >= 1500);
+    },
+    dispose() {
+      chrome.debugger.onEvent.removeListener(onEvent);
+    }
+  };
+}
+
+const REVIEW_LOADING_EXPRESSION = `(() => {
+  const selector = '[aria-busy="true"], [class*="skeleton" i], [class*="shimmer" i], [class*="spinner" i], [class*="loader" i], [class*="loading" i], [class*="placeholder-glow" i], [class*="placeholder-wave" i]';
+  const loaders = [...document.querySelectorAll(selector)].filter((element) => {
+    const rect = element.getBoundingClientRect();
+    if (rect.width < 2 || rect.height < 2) return false;
+    const style = getComputedStyle(element);
+    return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > 0.05;
+  }).length;
+  const body = document.body;
+  return {
+    loaders,
+    signature: body ? body.getElementsByTagName('*').length + ':' + body.innerText.length : ''
+  };
+})()`;
+
+// Skeleton screens render right away and are replaced when the data arrives,
+// so "elements exist" is not enough. Wait until the network is quiet, the DOM
+// stops changing and visible loaders are gone. Loader-like classes that stay
+// forever only delay the capture until the DOM has been stable for a while.
+async function waitForReviewPageSettled(debuggee, network, timeout = 12000) {
+  const deadline = Date.now() + timeout;
+  let lastSignature = '';
+  let stableSince = Date.now();
+  while (Date.now() < deadline) {
+    // Background tabs do not paint, so rAF-driven rendering would stall.
+    await renderReviewFrame(debuggee);
+    const result = await reviewDebuggerCommand(debuggee, 'Runtime.evaluate', {
+      expression: REVIEW_LOADING_EXPRESSION,
+      returnByValue: true
+    }, 3000).catch(() => null);
+    const state = result?.result?.value;
+    if (state) {
+      if (state.signature !== lastSignature) {
+        lastSignature = state.signature;
+        stableSince = Date.now();
+      }
+      const stableFor = Date.now() - stableSince;
+      if (network.isIdle() && ((state.loaders === 0 && stableFor >= 600) || stableFor >= 2500)) return;
+    }
+    await pause(200);
+  }
+}
+
 // Single-page apps fire the load event long before they render (auth checks,
 // API calls), so reviewed elements can appear seconds later. Wait until every
 // recorded element is present, or until the found set stops growing.
-async function waitForReviewTargets(debuggee, targets, changes = [], timeout = 8000) {
+async function waitForReviewTargets(debuggee, targets, changes = [], timeout = 10000) {
   const lookups = [
     ...targets.map(({ id, target }) => ({ id, target })),
     ...changes.map((change, index) => ({ id: `change:${index}`, target: change }))
@@ -441,11 +514,12 @@ async function waitForReviewTargets(debuggee, targets, changes = [], timeout = 8
     if (found !== lastFound) {
       lastFound = found;
       stableSince = Date.now();
-    } else if (found > 0 && Date.now() - stableSince >= 1200) {
+    } else if (found > 0 && Date.now() - stableSince >= 2000) {
       // Some elements are gone for good (edited page, other route); the
       // rest have rendered, so do not wait for the full timeout.
       return;
     }
+    await renderReviewFrame(debuggee);
     await pause(250);
   }
 }
@@ -455,6 +529,7 @@ async function captureReviewContext({ url, width, height, changes, targets = [],
   const viewportHeight = Math.max(1, Math.round(height));
   const previewTab = await chrome.tabs.create({ url: 'about:blank', active: false });
   const debuggee = { tabId: previewTab.id };
+  let network = null;
   try {
     if (!previewTab?.id) throw new Error('Unable to open a temporary review viewport.');
     await backgroundPromiseTimeout(chrome.debugger.attach(debuggee, '1.3'), 4000, 'Chrome debugger did not start in time.');
@@ -466,9 +541,12 @@ async function captureReviewContext({ url, width, height, changes, targets = [],
       deviceScaleFactor: 1,
       mobile: false
     });
+    network = trackReviewNetwork(debuggee);
+    await reviewDebuggerCommand(debuggee, 'Network.enable').catch(() => {});
     await navigateDebuggerPage(debuggee, url);
     await waitForReviewCaptureReady(debuggee);
     await waitForReviewTargets(debuggee, targets, changes);
+    await waitForReviewPageSettled(debuggee, network);
     const identity = await reviewIdentityFor(debuggee, url).catch(() => ({ name: '', logoDataUrl: '' }));
     const changesApplied = await reviewDebuggerCommand(debuggee, 'Runtime.evaluate', {
       expression: reviewPreparationExpression({ changes, target: null, marker: null }),
@@ -501,6 +579,7 @@ async function captureReviewContext({ url, width, height, changes, targets = [],
     }
     return { captures, identity };
   } finally {
+    network?.dispose();
     if (previewTab.id !== undefined) {
       await chrome.debugger.detach(debuggee).catch(() => {});
       await chrome.tabs.remove(previewTab.id).catch(() => {});
@@ -509,6 +588,52 @@ async function captureReviewContext({ url, width, height, changes, targets = [],
       await chrome.windows.update(returnWindowId, { focused: true }).catch(() => {});
     }
   }
+}
+
+// Clicks the view switches (tabs, panels) recorded with a comment, in order,
+// so the capture shows the view the comment was left in. A switch already
+// in its recorded state is left alone.
+function reviewStepsExpression(steps) {
+  const payload = JSON.stringify(steps.map((step) => ({ kind: step.kind, element: step.element, expanded: step.expanded, open: step.open })));
+  return `(async () => {
+    const steps = ${payload};
+    ${REVIEW_ELEMENT_HELPERS}
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    // Same popup test as the studio: dialogs, menus, and floating modals.
+    const popupSelector = 'dialog[open], [role="dialog"], [role="alertdialog"], [aria-modal="true"], [role="menu"], [role="listbox"], [popover], [class*="modal" i], [class*="dialog" i], [class*="drawer" i], [class*="popover" i], [class*="popup" i], [class*="dropdown-menu" i]';
+    const visiblePopups = () => [...document.querySelectorAll(popupSelector)].filter((node) => {
+      const rect = node.getBoundingClientRect();
+      const style = getComputedStyle(node);
+      if (rect.width < 1 || rect.height < 1 || style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) <= 0.05) return false;
+      if (node.matches('dialog, [role], [aria-modal], [popover]')) return !node.matches('[popover]') || node.matches(':popover-open');
+      return style.position === 'fixed' || style.position === 'absolute';
+    });
+    for (const step of steps) {
+      let control = null;
+      for (let attempt = 0; attempt < 30 && !control; attempt += 1) {
+        control = elementFor({ element: step.element });
+        if (!control) await wait(100);
+      }
+      if (!control) continue;
+      if (step.kind === 'open') {
+        // Open the popup and wait for it (and its animation) before going on.
+        const before = new Set(visiblePopups());
+        control.click();
+        for (let attempt = 0; attempt < 25; attempt += 1) {
+          await wait(100);
+          if (visiblePopups().some((node) => !before.has(node))) break;
+        }
+        await wait(300);
+        continue;
+      }
+      if (step.expanded && control.getAttribute('aria-expanded') === step.expanded) continue;
+      if (typeof step.open === 'boolean' && control.parentElement instanceof HTMLDetailsElement && control.parentElement.open === step.open) continue;
+      if (!step.expanded && typeof step.open !== 'boolean' && control.getAttribute('aria-selected') === 'true') continue;
+      control.click();
+      await wait(400);
+    }
+    return true;
+  })()`;
 }
 
 function reviewMeasureExpression(targets) {
@@ -529,8 +654,20 @@ function reviewMeasureExpression(targets) {
       viewportHeight: window.innerHeight,
       documentHeight: Math.max(root.scrollHeight, document.body?.scrollHeight || 0, root.clientHeight),
       rects: targets.map(({ id, target }) => {
+        // A point placed by hand in a review, in document coordinates.
+        const pin = target && target.pin;
+        if (pin && Number.isFinite(pin.x) && Number.isFinite(pin.y)) {
+          return { id, found: true, visible: true, fixed: false, x: pin.x, y: pin.y, width: 0, height: 0 };
+        }
         const element = elementFor(target);
-        if (!element) return { id, found: false };
+        if (!element) {
+          // Gone from the page: mark where the element was when commented.
+          const recorded = target && target.element && target.element.rect;
+          if (recorded && [recorded.x, recorded.y, recorded.width, recorded.height].every(Number.isFinite)) {
+            return { id, found: true, visible: true, fixed: false, x: recorded.x, y: recorded.y, width: recorded.width, height: recorded.height };
+          }
+          return { id, found: false };
+        }
         const rect = element.getBoundingClientRect();
         const style = getComputedStyle(element);
         const visible = rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
@@ -676,11 +813,12 @@ async function captureReviewShot(debuggee, targets, scrollY, width, height) {
   return { measurement, dataUrl: `data:image/jpeg;base64,${result.data}` };
 }
 
-async function captureReviewPage({ url, width, height, changes, targets = [], returnWindowId }) {
+async function captureReviewPage({ url, width, height, changes, targets = [], steps = [], returnWindowId }) {
   const viewportWidth = Math.max(1, Math.round(width));
   const viewportHeight = Math.max(1, Math.round(height));
   const previewTab = await chrome.tabs.create({ url: 'about:blank', active: false });
   const debuggee = { tabId: previewTab.id };
+  let network = null;
   try {
     if (!previewTab?.id) throw new Error('Unable to open a temporary review viewport.');
     await backgroundPromiseTimeout(chrome.debugger.attach(debuggee, '1.3'), 4000, 'Chrome debugger did not start in time.');
@@ -692,9 +830,21 @@ async function captureReviewPage({ url, width, height, changes, targets = [], re
       deviceScaleFactor: 1,
       mobile: false
     });
+    network = trackReviewNetwork(debuggee);
+    await reviewDebuggerCommand(debuggee, 'Network.enable').catch(() => {});
     await navigateDebuggerPage(debuggee, url);
     await waitForReviewCaptureReady(debuggee);
+    if (Array.isArray(steps) && steps.length) {
+      // Let the page render its default view before switching away from it.
+      await waitForReviewPageSettled(debuggee, network, 6000);
+      await reviewDebuggerCommand(debuggee, 'Runtime.evaluate', {
+        expression: reviewStepsExpression(steps),
+        awaitPromise: true,
+        returnByValue: true
+      }, 20000).catch(() => null);
+    }
     await waitForReviewTargets(debuggee, targets, changes);
+    await waitForReviewPageSettled(debuggee, network);
     const identity = await reviewIdentityFor(debuggee, url).catch(() => ({ name: '', logoDataUrl: '' }));
     const changesApplied = await reviewDebuggerCommand(debuggee, 'Runtime.evaluate', {
       expression: reviewPreparationExpression({ changes, target: null, marker: null }),
@@ -753,6 +903,7 @@ async function captureReviewPage({ url, width, height, changes, targets = [], re
       .map((rect) => ({ id: rect.id, found: Boolean(rect.found), visible: false }));
     return { shots, unplaced, identity };
   } finally {
+    network?.dispose();
     if (previewTab.id !== undefined) {
       await chrome.debugger.detach(debuggee).catch(() => {});
       await chrome.tabs.remove(previewTab.id).catch(() => {});
