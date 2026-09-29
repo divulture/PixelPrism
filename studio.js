@@ -992,13 +992,16 @@ function reviewDataFromHtml(text) {
 
 // Brings comments back from an exported HTML review. Older exports only
 // carry the element selector; newer ones carry the full element record and
-// points placed by hand in the review.
+// points placed by hand in the review. Entries checked off in the review and
+// saved into the file (data.resolved) are finished work and stay behind.
 async function importReviewFile(file) {
   const data = reviewDataFromHtml(await file.text());
   const known = new Set(comments.map(commentIdentity));
+  const resolved = new Set(Array.isArray(data.resolved) ? data.resolved.map(String) : []);
   let added = 0;
   let duplicates = 0;
   let changes = 0;
+  let done = 0;
   data.pages.forEach((page) => {
     const url = canonicalInspectorUrl(String(page.url || ''));
     let route = '/';
@@ -1007,6 +1010,10 @@ async function importReviewFile(file) {
       (viewport.entries || []).forEach((entry) => {
         if (entry.kind === 'change') {
           changes += 1;
+          return;
+        }
+        if (entry.id != null && resolved.has(String(entry.id))) {
+          done += 1;
           return;
         }
         let element = null;
@@ -1043,6 +1050,7 @@ async function importReviewFile(file) {
   syncChangeUi();
   syncCommentMarkers();
   const notes = [];
+  if (done) notes.push(`${done} resolved skipped`);
   if (duplicates) notes.push(`${duplicates} already in the list`);
   if (changes) notes.push(`${changes} CSS change${changes === 1 ? '' : 's'} skipped`);
   notify(`Imported ${added} comment${added === 1 ? '' : 's'}${notes.length ? ` (${notes.join(', ')})` : ''}.`, added ? 'success' : undefined);

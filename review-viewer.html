@@ -79,7 +79,22 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
 .stage-title a { overflow: hidden; color: var(--ink); font-size: 12px; font-weight: 700; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
 .stage-title a:hover { text-decoration: underline; }
 .stage-title span { flex: none; color: var(--muted); font-size: 11px; font-weight: 500; }
-.zoom { grid-column: 3; justify-self: end; display: flex; align-items: center; gap: 2px; flex: none; padding: 2px; border: 1px solid var(--line); border-radius: 6px; }
+.toolbar-end { grid-column: 3; justify-self: end; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.shot-tools { display: flex; align-items: center; gap: 2px; flex: none; padding: 2px; border: 1px solid var(--line); border-radius: 6px; }
+.shot-tools button { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border: 0; border-radius: 4px; background: transparent; color: var(--text); font-size: 11px; font-weight: 700; white-space: nowrap; }
+.shot-tools button:hover { background: var(--hover); }
+.shot-tools button.icon-only { width: 26px; padding: 0; justify-content: center; }
+.shot-tools svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.stage-wrap.is-drop-target::after { content: "Drop an image to replace this screenshot"; position: absolute; inset: 52px 8px 8px; z-index: 4; display: grid; place-items: center; border: 2px dashed var(--focus); border-radius: 8px; background: rgba(83, 103, 217, .08); color: var(--focus); font-size: 12px; font-weight: 700; pointer-events: none; }
+.stage-wrap.is-drop-target.is-empty-drop::after { content: "Drop an image to add a screenshot"; }
+.notice { position: absolute; bottom: 16px; left: 50%; z-index: 5; display: flex; align-items: center; gap: 10px; max-width: calc(100% - 24px); padding: 6px 6px 6px 12px; border-radius: 6px; background: var(--ink); color: #fff; box-shadow: 0 6px 20px rgba(24, 24, 27, .25); font-size: 11px; font-weight: 600; transform: translateX(-50%); }
+.notice.is-error { background: var(--accent-ink); }
+.notice.is-plain { padding-right: 12px; }
+.notice button { height: 24px; padding: 0 8px; border: 0; border-radius: 4px; background: rgba(255, 255, 255, .14); color: #fff; font-size: 11px; font-weight: 700; }
+.notice button:hover { background: rgba(255, 255, 255, .24); }
+.stage-empty button { margin-top: 12px; height: 28px; padding: 0 12px; border: 1px solid var(--ink); border-radius: 6px; background: var(--ink); color: #fff; font-size: 11px; font-weight: 700; }
+.stage-empty button:hover { background: #3f3f46; }
+.zoom { display: flex; align-items: center; gap: 2px; flex: none; padding: 2px; border: 1px solid var(--line); border-radius: 6px; }
 .zoom button { display: grid; place-items: center; min-width: 26px; height: 24px; padding: 0 6px; border: 0; border-radius: 4px; background: transparent; color: var(--text); font-size: 11px; font-weight: 700; }
 .zoom button:hover { background: var(--hover); }
 .zoom button[aria-pressed="true"] { background: var(--ink); color: #fff; }
@@ -119,6 +134,10 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
 .comment-item.is-selected { background: var(--hover); }
 .comment-item p { display: -webkit-box; margin: 0; overflow: hidden; overflow-wrap: anywhere; color: var(--text); font-size: 12px; font-weight: 500; line-height: 18px; white-space: pre-wrap; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
 .comment-item.is-text-expanded p { display: block; overflow: visible; -webkit-line-clamp: unset; }
+.comment-item p { cursor: text; user-select: text; }
+.comment-link { color: var(--focus); text-decoration: underline; text-decoration-color: rgba(83, 103, 217, .4); text-underline-offset: 2px; cursor: pointer; }
+.comment-link:hover { text-decoration-color: currentColor; }
+.comment-item.is-done .comment-link { color: var(--faint); text-decoration: line-through; }
 .comment-item p code { padding: 0 3px; border-radius: 3px; background: rgba(24, 24, 27, .06); font: 600 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .comment-kind { display: block; margin-bottom: 2px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; }
 .comment-meta { display: flex; align-items: center; gap: 4px; min-height: 18px; color: var(--muted); font: 400 11px/1.2 Inter, sans-serif; }
@@ -186,6 +205,12 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
           <span id="shot-label"></span>
           <button type="button" id="shot-next" aria-label="Next screen" title="Next screen (])"><svg viewBox="0 0 16 16"><path d="M6 3.5L10.5 8 6 12.5"/></svg></button>
         </div>
+        <div class="toolbar-end">
+        <div class="shot-tools" role="group" aria-label="Screenshot">
+          <button type="button" id="shot-replace" title="Replace this screenshot with an image file. You can also paste an image (⌘V) or drop one on the screenshot."><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2.5 11l3.5-3.5 3 3 2-2 2.5 2.5"/><circle cx="10.5" cy="6" r="1"/></svg><span>Replace</span></button>
+          <button type="button" class="icon-only" id="shot-restore" aria-label="Restore the original screenshot" title="Restore the original screenshot" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4v3.5h3.5"/><path d="M3.4 7.2A5 5 0 1 1 4.5 11.5"/></svg></button>
+        </div>
+        <input type="file" id="shot-file" accept="image/*" hidden>
         <div class="zoom" role="group" aria-label="Zoom">
           <button type="button" id="zoom-out" aria-label="Zoom out" title="Zoom out (−)"><svg viewBox="0 0 16 16"><path d="M3.5 8h9"/></svg></button>
           <button type="button" class="zoom-value" id="zoom-value" title="Reset to 100% (1)">100%</button>
@@ -194,7 +219,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
           <button type="button" id="zoom-fit" aria-pressed="true" title="Fit to screen (0)">Fit</button>
           <button type="button" id="zoom-actual" aria-pressed="false" title="Actual size (1)">100%</button>
         </div>
+        </div>
       </div>
+      <div class="notice" id="notice" role="status" hidden><span id="notice-text"></span><button type="button" id="notice-action" hidden></button></div>
       <div class="place-hint" id="place-hint" role="status" hidden><span id="place-hint-text"></span><button type="button" id="place-cancel">Cancel</button></div>
       <div class="stage" id="stage" tabindex="-1">
         <div class="canvas" id="canvas" hidden><img id="screenshot" alt=""><div class="overlay" id="overlay"></div></div>
@@ -393,9 +420,44 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     }));
   }
 
+  // Web addresses in a comment become links that open in a new tab.
+  // Punctuation that ends a sentence stays outside the link, as does a
+  // closing bracket the address never opened: "(see https://a.b/c)".
+  const URL_PATTERN = /\b(?:https?:\/\/|www\.)[^\s<>"'«»]+/gi;
+  function trimUrl(url) {
+    let end = url.length;
+    while (end > 0) {
+      const char = url[end - 1];
+      if ('.,;:!?\'"'.includes(char)) { end -= 1; continue; }
+      const pair = { ')': '(', ']': '[', '}': '{' }[char];
+      if (pair) {
+        const head = url.slice(0, end);
+        if (head.split(pair).length < head.split(char).length) { end -= 1; continue; }
+      }
+      break;
+    }
+    return url.slice(0, end);
+  }
+  function appendLinkedText(parent, text) {
+    let last = 0;
+    for (const match of text.matchAll(URL_PATTERN)) {
+      const url = trimUrl(match[0]);
+      if (!url) continue;
+      parent.append(text.slice(last, match.index));
+      const link = el('a', 'comment-link', url);
+      link.href = /^www\./i.test(url) ? `https://${url}` : url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.title = link.href;
+      parent.append(link);
+      last = match.index + url.length;
+    }
+    parent.append(text.slice(last));
+  }
+
   function entryText(entry, paragraph) {
     if (entry.kind !== 'change') {
-      paragraph.textContent = entry.text;
+      appendLinkedText(paragraph, entry.text || '');
       return;
     }
     const property = el('code', '', entry.property);
@@ -638,10 +700,15 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     canvas.hidden = !shot;
     stageEmpty.hidden = Boolean(shot);
     document.querySelectorAll('.zoom button').forEach((button) => { button.disabled = !shot; });
+    $('#shot-replace span').textContent = shot ? 'Replace' : 'Add';
+    $('#shot-restore').hidden = !shot?.original;
     if (!shot) {
       const strong = el('strong', '', 'Screenshot unavailable');
+      const add = el('button', '', 'Add screenshot');
+      add.type = 'button';
+      add.dataset.action = 'add-shot';
       stageEmpty.replaceChildren(el('div'));
-      stageEmpty.firstChild.append(strong, viewport.error || 'Chrome did not return an image for this viewport.');
+      stageEmpty.firstChild.append(strong, viewport.error || 'Chrome did not return an image for this viewport.', el('br'), add);
       return;
     }
     if (screenshot.getAttribute('src') !== shot.src) screenshot.src = shot.src;
@@ -780,15 +847,18 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
   const save = { status: 'idle', error: '', version: 0, handle: null, running: false, again: false, timer: null, hideTimer: null };
   const canSaveToFile = typeof window.showOpenFilePicker === 'function';
 
-  function handleStore(mode, action) {
+  // Screenshots replaced but not yet written into the file wait in their own
+  // database: images are too large for localStorage, and older review files
+  // open the handles database at its first version.
+  function handleStore(mode, action, database = 'pixelprism-review-files', storeName = 'handles') {
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open('pixelprism-review-files', 1);
-      request.onupgradeneeded = () => request.result.createObjectStore('handles');
+      const request = indexedDB.open(database, 1);
+      request.onupgradeneeded = () => request.result.createObjectStore(storeName);
       request.onerror = () => reject(request.error);
       request.onsuccess = () => {
         const db = request.result;
-        const transaction = db.transaction('handles', mode);
-        const operation = action(transaction.objectStore('handles'));
+        const transaction = db.transaction(storeName, mode);
+        const operation = action(transaction.objectStore(storeName));
         transaction.oncomplete = () => { db.close(); resolve(operation.result); };
         transaction.onerror = () => { db.close(); reject(transaction.error); };
       };
@@ -856,6 +926,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
         state.unsaved = false;
         pinDraft = {};
         deletedDraft = [];
+        shotDraft = {};
+        shotStore('readwrite', (store) => store.delete(data.id)).catch(() => {});
         try {
           localStorage.removeItem(PINS_KEY);
           localStorage.removeItem(DELETED_KEY);
@@ -887,6 +959,122 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     renderSave();
     clearTimeout(save.timer);
     save.timer = setTimeout(() => saveToFile(false), 400);
+  }
+
+  // Replacing screenshots. Drafts are kept per screen, as "page:viewport:shot".
+  let shotDraft = {};
+  const shotStore = (mode, action) => handleStore(mode, action, 'pixelprism-review-drafts', 'shots');
+  const saveShotDraft = () => {
+    shotStore('readwrite', (store) => store.put(shotDraft, data.id)).catch(() => { /* Kept for this session. */ });
+  };
+
+  const notice = { timer: null, action: null };
+  function showNotice(text, { action, label, error } = {}) {
+    clearTimeout(notice.timer);
+    const box = $('#notice');
+    $('#notice-text').textContent = text;
+    const button = $('#notice-action');
+    button.hidden = !action;
+    button.textContent = label || '';
+    notice.action = action || null;
+    box.classList.toggle('is-error', Boolean(error));
+    box.classList.toggle('is-plain', !action);
+    box.hidden = false;
+    notice.timer = setTimeout(hideNotice, action ? 6000 : 4000);
+  }
+  function hideNotice() {
+    clearTimeout(notice.timer);
+    $('#notice').hidden = true;
+    notice.action = null;
+  }
+
+  // Images come in as they are and go into the file as JPEG, like the
+  // screenshots PixelPrism captures, so a large PNG does not swell the file.
+  async function imageToShot(file) {
+    const url = URL.createObjectURL(file);
+    try {
+      const image = new Image();
+      image.src = url;
+      await image.decode();
+      const width = image.naturalWidth;
+      const height = image.naturalHeight;
+      if (!width || !height) throw new Error('empty');
+      const drawing = document.createElement('canvas');
+      drawing.width = width;
+      drawing.height = height;
+      const context = drawing.getContext('2d');
+      // JPEG has no transparency; transparent areas become white, not black.
+      context.fillStyle = '#fff';
+      context.fillRect(0, 0, width, height);
+      context.drawImage(image, 0, 0);
+      const src = drawing.toDataURL('image/jpeg', 0.9);
+      if (!src.startsWith('data:image/jpeg')) throw new Error('encode');
+      return { src, width, height };
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  // Replacing a screenshot is a last resort for a capture that went wrong:
+  // only the image changes. Comments and their points stay as they are.
+  function commitShot(next, target) {
+    const viewport = data.pages[target.page]?.viewports[target.viewport];
+    if (!viewport) return;
+    viewport.shots[target.shot] = next;
+    shotDraft[`${target.page}:${target.viewport}:${target.shot}`] = next;
+    saveShotDraft();
+    markChanged();
+    stopPlacing();
+    const moved = target.page !== state.page || target.viewport !== state.viewport;
+    Object.assign(state, { page: target.page, viewport: target.viewport, shot: target.shot });
+    if (moved) state.selected = null;
+    render();
+    renderStage();
+  }
+
+  async function replaceShot(file) {
+    if (!file || !file.type.startsWith('image/')) {
+      showNotice('Pick an image file: PNG, JPEG or WebP.', { error: true });
+      return;
+    }
+    const viewport = currentViewport();
+    const target = { page: state.page, viewport: state.viewport, shot: viewport.shots.length ? state.shot : 0 };
+    const previous = viewport.shots[target.shot] || null;
+    let image;
+    try {
+      image = await imageToShot(file);
+    } catch {
+      showNotice('This image could not be read.', { error: true });
+      return;
+    }
+    const next = previous
+      ? {
+        ...previous,
+        ...image,
+        // The captured image is kept once, however often the screen is replaced.
+        ...(previous.added ? {} : { original: previous.original || { src: previous.src, width: previous.width, height: previous.height } })
+      }
+      : { ...image, scrollY: 0, added: true };
+    commitShot(next, target);
+    showNotice(previous ? 'Screenshot replaced.' : 'Screenshot added.', previous ? {
+      label: 'Undo',
+      action: () => commitShot(previous, target)
+    } : {});
+  }
+
+  function restoreShot() {
+    const shot = currentShot();
+    if (!shot?.original) return;
+    const next = { ...shot, ...shot.original };
+    delete next.original;
+    commitShot(next, { page: state.page, viewport: state.viewport, shot: state.shot });
+    showNotice('Original screenshot restored.');
+  }
+
+  function pickShotFile() {
+    const input = $('#shot-file');
+    input.value = '';
+    input.click();
   }
 
   function selectPage(index) {
@@ -1028,8 +1216,16 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
       selectViewport(Number(header.dataset.viewport));
       return;
     }
+    // A link opens on its own and leaves the card as it is.
+    if (event.target.closest('a[href]')) return;
     const item = event.target.closest('.comment-item');
-    if (item) toggleEntryExpanded(item.dataset.entry);
+    if (!item) return;
+    // Selecting text to copy it is not a click on the card: re-rendering the
+    // list would drop the selection. The same goes for double and triple
+    // clicks, which select a word or a paragraph.
+    const selection = window.getSelection();
+    if (event.detail > 1 || (selection && !selection.isCollapsed && item.contains(selection.anchorNode))) return;
+    toggleEntryExpanded(item.dataset.entry);
   });
 
   $('#comments-groups').addEventListener('keydown', (event) => {
@@ -1088,6 +1284,47 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     applyZoom(Math.min(4, Math.max(0.25, state.zoom * factor)), { x: event.clientX, y: event.clientY });
   }, { passive: false });
 
+  $('#shot-replace').addEventListener('click', pickShotFile);
+  $('#shot-restore').addEventListener('click', restoreShot);
+  $('#shot-file').addEventListener('change', (event) => replaceShot(event.target.files?.[0]));
+  stageEmpty.addEventListener('click', (event) => {
+    if (event.target.closest('[data-action="add-shot"]')) pickShotFile();
+  });
+  $('#notice-action').addEventListener('click', () => {
+    const action = notice.action;
+    hideNotice();
+    action?.();
+  });
+  // An image pasted anywhere in the review replaces the screen on display.
+  document.addEventListener('paste', (event) => {
+    if (event.target.closest?.('input, textarea, [contenteditable="true"]')) return;
+    const item = [...(event.clipboardData?.items || [])].find((candidate) => candidate.kind === 'file' && candidate.type.startsWith('image/'));
+    if (!item) return;
+    event.preventDefault();
+    replaceShot(item.getAsFile());
+  });
+  // A file dropped outside the stage would make the browser leave the review.
+  const hasFiles = (event) => [...(event.dataTransfer?.types || [])].includes('Files');
+  document.addEventListener('dragover', (event) => { if (hasFiles(event)) event.preventDefault(); });
+  document.addEventListener('drop', (event) => { if (hasFiles(event)) event.preventDefault(); });
+  stage.addEventListener('dragover', (event) => {
+    if (!hasFiles(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    stage.parentElement.classList.add('is-drop-target');
+    stage.parentElement.classList.toggle('is-empty-drop', !currentShot());
+  });
+  stage.addEventListener('dragleave', (event) => {
+    if (!stage.contains(event.relatedTarget)) stage.parentElement.classList.remove('is-drop-target');
+  });
+  stage.addEventListener('drop', (event) => {
+    stage.parentElement.classList.remove('is-drop-target');
+    if (!hasFiles(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    replaceShot([...event.dataTransfer.files].find((file) => file.type.startsWith('image/')) || event.dataTransfer.files[0]);
+  });
+
   $('#place-cancel').addEventListener('click', cancelPlacing);
   $('#save-file').addEventListener('click', () => saveToFile(true));
   $('#shot-prev').addEventListener('click', () => selectShot(state.shot - 1));
@@ -1119,6 +1356,25 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
   renderStage();
   // Work left from an earlier visit goes into the file as soon as access allows.
   if (state.unsaved) saveToFile(false);
+  // Screenshots replaced on an earlier visit and not yet in the file.
+  shotStore('readonly', (store) => store.get(data.id)).then((stored) => {
+    if (!stored || typeof stored !== 'object') return;
+    let changed = false;
+    Object.entries(stored).forEach(([key, shot]) => {
+      const [pageIndex, viewportIndex, shotIndex] = key.split(':').map(Number);
+      const viewport = data.pages[pageIndex]?.viewports[viewportIndex];
+      if (!viewport || !shot?.src || shotIndex > viewport.shots.length) return;
+      shotDraft[key] = shot;
+      if (viewport.shots[shotIndex]?.src === shot.src) return;
+      viewport.shots[shotIndex] = shot;
+      changed = true;
+    });
+    if (!changed) return;
+    state.unsaved = true;
+    render();
+    renderStage();
+    saveToFile(false);
+  }).catch(() => { /* No drafts to bring back. */ });
 })();
 </script>
 </body>

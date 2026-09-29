@@ -434,9 +434,20 @@
   const gutterLayer = document.createElement('div');
   const layoutMap = document.createElement('div');
   const label = document.createElement('div');
+  // The layout mode greys the page out through one layer that filters what
+  // lies under it. A filter on the page's own elements would turn them into
+  // the containing block of every position:fixed descendant, so drawers,
+  // sidebars and modals would open relative to the page, off screen.
   const contrastStyle = document.createElement('style');
-  contrastStyle.textContent = 'html[data-viewport-parade-layout-contrast] body { background: #fff !important; } html[data-viewport-parade-layout-contrast] body > :not([data-viewport-parade-overlay]) { filter: grayscale(1) contrast(.92) !important; }';
+  contrastStyle.dataset.viewportParadeOverlay = '';
+  contrastStyle.textContent = 'html[data-viewport-parade-layout-contrast] body { background: #fff !important; } [data-viewport-parade-contrast-layer] { display: none; } html[data-viewport-parade-layout-contrast] [data-viewport-parade-contrast-layer] { display: block; }';
   document.documentElement.append(contrastStyle);
+  const contrastLayer = document.createElement('div');
+  contrastLayer.setAttribute('aria-hidden', 'true');
+  contrastLayer.dataset.viewportParadeOverlay = '';
+  contrastLayer.dataset.viewportParadeContrastLayer = '';
+  contrastLayer.style.cssText = 'position:fixed;inset:0;z-index:2147483644;pointer-events:none;-webkit-backdrop-filter:grayscale(1) contrast(.92);backdrop-filter:grayscale(1) contrast(.92);';
+  document.documentElement.append(contrastLayer);
   [marginOverlay, paddingOverlay, contentOverlay, gutterLayer, layoutMap].forEach((overlay) => {
     overlay.setAttribute('aria-hidden', 'true');
     overlay.dataset.viewportParadeOverlay = '';
@@ -447,7 +458,7 @@
   paddingOverlay.style.cssText += 'border:1px solid rgba(113,113,122,.7);background:rgba(113,113,122,.07);';
   contentOverlay.style.cssText += 'border:1px solid rgba(161,161,170,.75);background:rgba(161,161,170,.08);';
   gutterLayer.style.cssText += 'z-index:2147483647;';
-  layoutMap.style.cssText += 'z-index:2147483645;';
+  layoutMap.style.cssText += 'z-index:2147483645;inset:0;';
   label.style.cssText = 'position:absolute;left:-2px;top:-57px;max-width:min(390px,calc(100vw - 16px));padding:5px 7px;border-radius:4px;background:#15181f;color:#fff;font:600 11px/1.3 Inter,ui-sans-serif,system-ui,sans-serif;white-space:pre-wrap;box-shadow:0 4px 12px rgba(0,0,0,.25);';
   marginOverlay.append(label);
 
@@ -593,21 +604,67 @@
     };
     window.parent.postMessage({ source: 'viewport-parade', type: 'inspector-editor-open', editor: { mode, title, values, valueSources, context } }, extensionOrigin);
   };
+  let mapParent = layoutMap;
   const mapBox = (left, top, width, height, style) => {
     if (width < 1 || height < 1) return;
     const box = document.createElement('div');
-    box.style.cssText = `position:fixed;left:${Math.round(left)}px;top:${Math.round(top)}px;width:${Math.round(width)}px;height:${Math.round(height)}px;box-sizing:border-box;${style}`;
-    layoutMap.append(box);
+    box.style.cssText = `position:absolute;left:${Math.round(left)}px;top:${Math.round(top)}px;width:${Math.round(width)}px;height:${Math.round(height)}px;box-sizing:border-box;${style}`;
+    mapParent.append(box);
+  };
+  // A fixed element that is on top where it stands: a drawer, a modal, a
+  // fixed header. Hit-testing its visible middle tells it from a fixed
+  // background that sits under the page.
+  const isTopLayer = (element, box) => {
+    const x = (Math.max(box.left, 0) + Math.min(box.right, innerWidth)) / 2;
+    const y = (Math.max(box.top, 0) + Math.min(box.bottom, innerHeight)) / 2;
+    const hit = document.elementFromPoint(x, y);
+    return Boolean(hit && element.contains(hit));
+  };
+  // A layer covers an element's outline when it is not part of that layer
+  // and is what shows where the two overlap: a panel over the page covers the
+  // page, while a fixed page shell under a panel does not cover the panel.
+  const coversOutline = (layer, element, outer) => {
+    if (layer.element.contains(element)) return false;
+    const left = Math.max(layer.box.left, outer.left, 0);
+    const right = Math.min(layer.box.right, outer.right, innerWidth);
+    const top = Math.max(layer.box.top, outer.top, 0);
+    const bottom = Math.min(layer.box.bottom, outer.bottom, innerHeight);
+    if (right <= left || bottom <= top) return false;
+    const hit = document.elementFromPoint((left + right) / 2, (top + bottom) / 2);
+    return Boolean(hit && layer.element.contains(hit));
+  };
+  // Outlines of an element are cut out wherever a top layer covers it, so a
+  // panel opened over the page stays over the page's outlines too. Each hole
+  // is its own nested clip, so overlapping layers still subtract cleanly.
+  const clipGroups = new Map();
+  const clipGroup = (holes) => {
+    const key = holes.map((hole) => hole.index).join(',');
+    if (clipGroups.has(key)) return clipGroups.get(key);
+    let parent = layoutMap;
+    holes.forEach(({ box }) => {
+      const wrap = document.createElement('div');
+      const [l, t, r, b] = [box.left, box.top, box.right, box.bottom].map(Math.round);
+      wrap.style.cssText = `position:absolute;inset:0;clip-path:path(evenodd,'M-10 -10H${innerWidth + 10}V${innerHeight + 10}H-10Z M${l} ${t}H${r}V${b}H${l}Z');`;
+      parent.append(wrap);
+      parent = wrap;
+    });
+    clipGroups.set(key, parent);
+    return parent;
   };
   const renderLayoutMap = () => {
     layoutMap.replaceChildren();
+    clipGroups.clear();
     layoutMap.style.display = layoutMode ? 'block' : 'none';
     if (!layoutMode) return;
+    const layers = [];
     const candidates = [...document.body.querySelectorAll('*')]
       .filter((element) => {
         const box = element.getBoundingClientRect();
         if (box.width < 24 || box.height < 24 || box.bottom < 0 || box.right < 0 || box.top > innerHeight || box.left > innerWidth) return false;
         const styles = getComputedStyle(element);
+        if (styles.position === 'fixed' && styles.visibility !== 'hidden' && isTopLayer(element, box)) {
+          layers.push({ element, box, index: layers.length });
+        }
         const hasSpacing = number(styles.marginTop) || number(styles.marginRight) || number(styles.marginBottom) || number(styles.marginLeft)
           || number(styles.paddingTop) || number(styles.paddingRight) || number(styles.paddingBottom) || number(styles.paddingLeft)
           || number(styles.rowGap) || number(styles.columnGap);
@@ -619,6 +676,10 @@
       const box = element.getBoundingClientRect();
       const styles = getComputedStyle(element);
       const margin = ['marginTop', 'marginRight', 'marginBottom', 'marginLeft'].map((property) => number(styles[property]));
+      const outer = { left: box.left - margin[3], top: box.top - margin[0], right: box.right + margin[1], bottom: box.bottom + margin[2] };
+      mapParent = layoutMap;
+      const holes = layers.filter((layer) => coversOutline(layer, element, outer));
+      if (holes.length) mapParent = clipGroup(holes);
       const padding = ['paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft'].map((property) => number(styles[property]));
       const border = ['borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth'].map((property) => number(styles[property]));
       // The persistent layout map is deliberately monochrome. Colour is reserved
@@ -650,6 +711,17 @@
     if (!layoutMode || mapFrame) return;
     mapFrame = requestAnimationFrame(() => { mapFrame = undefined; renderLayoutMap(); });
   };
+  // Panels and modals open without a scroll, so the map also follows changes
+  // in the page and the end of their slide-in transitions. Studio overlays
+  // live outside <body>, so drawing the map never triggers another round.
+  let mapTimer;
+  const scheduleLayoutMapSoon = () => {
+    if (!layoutMode || mapTimer) return;
+    mapTimer = setTimeout(() => { mapTimer = undefined; scheduleLayoutMap(); }, 120);
+  };
+  new MutationObserver(scheduleLayoutMapSoon).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style', 'hidden', 'open'] });
+  document.addEventListener('transitionend', scheduleLayoutMapSoon, true);
+  document.addEventListener('animationend', scheduleLayoutMapSoon, true);
   const number = (value) => Number.parseFloat(value) || 0;
   const setRect = (overlay, left, top, width, height) => {
     overlay.style.display = 'block';

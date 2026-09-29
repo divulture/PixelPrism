@@ -23,3 +23,6 @@ pnpm-debug.log*
 !.env.example
 .vscode/
 .idea/
+
+# Promo video project (HyperFrames skills, captures, renders) — not part of the extension
+videos/
