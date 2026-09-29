@@ -60,6 +60,14 @@ const commentsMenuToggle = document.querySelector('#comments-menu-toggle');
 const commentsMenu = document.querySelector('#comments-menu');
 const commentsMenuDeleteAll = document.querySelector('#comments-delete-all');
 const commentsImportInput = document.querySelector('#comments-import-input');
+const commentAttachButton = document.querySelector('#comment-attach');
+const commentAttachInput = document.querySelector('#comment-attach-input');
+const commentDraftAttachments = document.querySelector('#comment-draft-attachments');
+const imageViewer = document.querySelector('#image-viewer');
+const imageViewerImage = document.querySelector('#image-viewer-image');
+const imageViewerCaption = document.querySelector('#image-viewer-caption');
+const imageViewerPrev = document.querySelector('#image-viewer-prev');
+const imageViewerNext = document.querySelector('#image-viewer-next');
 
 let targetUrl = normalizeUrl(params.get('url') || '');
 let fileAccessAllowed = params.get('fileAccess') !== 'false';
@@ -674,12 +682,25 @@ function renderCommentItem(comment, index) {
     const save = document.createElement('button');
     save.type = 'button'; save.dataset.action = 'edit-save'; save.textContent = 'Save';
     save.title = 'Save (⌘ Enter)';
-    save.disabled = !editingCommentDraft.trim();
-    actions.append(cancel, save);
+    save.disabled = !editingCommentDraft.trim() && !commentAttachments(comment).length;
+    const attach = document.createElement('button');
+    attach.type = 'button'; attach.className = 'comment-attach tooltip-trigger'; attach.dataset.action = 'add-image';
+    attach.setAttribute('aria-label', 'Attach images');
+    attach.dataset.tooltip = 'Attach images';
+    attach.innerHTML = window.phosphorIcon('paperclip');
+    actions.append(attach, cancel, save);
     text.append(field, actions);
-  } else {
+  } else if (comment.comment) {
     text = document.createElement('p');
     text.textContent = comment.comment;
+  }
+  // The last image of a comment without text goes with the comment itself.
+  const attachments = commentAttachments(comment);
+  let tiles = attachments.length ? renderAttachmentTiles(attachments, { removable: attachments.length > 1 || Boolean(comment.comment.trim()) }) : null;
+  // While editing, the images sit between the text and its buttons.
+  if (isEditing && tiles) {
+    text.insertBefore(tiles, text.querySelector('.comment-edit-actions'));
+    tiles = null;
   }
   // Text first, then the meta row: number, element, whether it was found, actions.
   const meta = document.createElement('div');
@@ -728,12 +749,13 @@ function renderCommentItem(comment, index) {
     menu.append(button);
   };
   menuItem('edit', 'Edit');
+  if (attachments.length < ATTACHMENTS_PER_COMMENT) menuItem('add-image', 'Attach images');
   menuItem('move', isPlacing ? 'Cancel attaching' : (placement === 'placed' ? 'Reattach' : 'Place comment'));
   // The menu lives inside actions so it tracks that row regardless of how
   // tall the comment text above it is.
   actions.append(menu);
   if (!isEditing) meta.append(actions);
-  item.append(text, meta);
+  item.append(...[text, tiles, meta].filter(Boolean));
   return item;
 }
 
@@ -748,7 +770,7 @@ function syncCommentMarkers() {
     if (!enabled && !card.commentMarkersPayload) return;
     const markers = enabled ? comments.flatMap((comment, index) => (
       isCommentAnchored(comment) && commentShownOnCard(comment, card)
-        ? [{ id: commentId(comment), number: index + 1, text: comment.comment, element: comment.element || null, selector: comment.element?.selector || '', pin: comment.pin || null, offset: comment.offset || null, steps: comment.steps || [] }]
+        ? [{ id: commentId(comment), number: index + 1, text: commentSummary(comment), element: comment.element || null, selector: comment.element?.selector || '', pin: comment.pin || null, offset: comment.offset || null, steps: comment.steps || [] }]
         : []
     )) : [];
     const message = { source: 'viewport-parade', type: 'comment-markers', enabled, markers, selectedId: enabled ? selectedCommentId : null, scale: Number(card.dataset.scale) || 1 };
@@ -857,14 +879,320 @@ function setCommentsOpen(open) {
 
 function addComment(rawComment) {
   const comment = rawComment.trim();
-  if (!comment) return;
+  if (!comment && !draftAttachments.length) return;
   const context = activeCommentContext();
   const activeCard = cardForFrame(layersFrame) || document.querySelector('.viewport-card');
   const viewport = context?.viewport || (activeCard ? { width: Number(activeCard.dataset.viewportWidth), height: Number(activeCard.dataset.viewportHeight) } : { width: window.innerWidth, height: window.innerHeight });
-  comments.push({ type: 'comment', url: context?.url || canonicalInspectorUrl(activeCard?.dataset.loadedUrl || targetUrl), route: context?.route || '/', viewport, ...(context?.element ? { element: context.element } : {}), ...(context?.steps?.length ? { steps: context.steps } : {}), comment });
+  comments.push({ type: 'comment', url: context?.url || canonicalInspectorUrl(activeCard?.dataset.loadedUrl || targetUrl), route: context?.route || '/', viewport, ...(context?.element ? { element: context.element } : {}), ...(context?.steps?.length ? { steps: context.steps } : {}), comment, ...(draftAttachments.length ? { attachments: draftAttachments } : {}) });
   commentInput.value = '';
+  draftAttachments = [];
+  renderDraftAttachments();
   saveComments();
   renderComments(); syncChangeUi(); syncCommentMarkers(); notify('Comment added to the pending handoff.', 'success');
+}
+
+// Images attached to comments. A comment keeps a small record per image
+// ({ id, name, type, size, width, height }); the file itself lives in
+// IndexedDB, since localStorage only fits a few screenshots.
+const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
+const ATTACHMENTS_PER_COMMENT = 10;
+const attachmentUrls = new Map();
+const attachmentLoads = new Map();
+// Images attached to the comment being written, before it is added.
+let draftAttachments = [];
+// Stored this session: never pruned while a comment may be about to take them.
+const sessionAttachmentIds = new Set();
+let attachmentDbPromise = null;
+
+function attachmentStore(mode, action) {
+  attachmentDbPromise ||= new Promise((resolve, reject) => {
+    const request = indexedDB.open('pixelprism-attachments', 1);
+    request.onupgradeneeded = () => request.result.createObjectStore('images');
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  }).catch((error) => {
+    attachmentDbPromise = null;
+    throw error;
+  });
+  return attachmentDbPromise.then((db) => new Promise((resolve, reject) => {
+    const transaction = db.transaction('images', mode);
+    const request = action(transaction.objectStore('images'));
+    transaction.oncomplete = () => resolve(request?.result);
+    transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(transaction.error);
+  }));
+}
+
+function newAttachmentId() {
+  return `image-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function commentAttachments(comment) {
+  return Array.isArray(comment?.attachments) ? comment.attachments : [];
+}
+
+// What a comment says in one line, also when it is only images.
+function commentSummary(comment) {
+  const count = commentAttachments(comment).length;
+  return comment.comment || (count === 1 ? 'Image' : `${count} images`);
+}
+
+function loadAttachmentUrl(id) {
+  if (attachmentUrls.has(id)) return Promise.resolve(attachmentUrls.get(id));
+  if (!attachmentLoads.has(id)) {
+    attachmentLoads.set(id, attachmentStore('readonly', (store) => store.get(id))
+      .then((blob) => {
+        if (blob instanceof Blob) attachmentUrls.set(id, URL.createObjectURL(blob));
+        return attachmentUrls.get(id) || '';
+      })
+      .catch(() => '')
+      .finally(() => attachmentLoads.delete(id)));
+  }
+  return attachmentLoads.get(id);
+}
+
+function attachmentBlob(id) {
+  return attachmentStore('readonly', (store) => store.get(id)).then((blob) => (blob instanceof Blob ? blob : null), () => null);
+}
+
+// Stores picked, pasted or dropped images; returns the records of the ones kept.
+async function storeImageFiles(files, room) {
+  const skipped = { type: 0, size: 0, count: 0, failed: 0 };
+  const added = [];
+  for (const file of files) {
+    if (!file.type.startsWith('image/')) { skipped.type += 1; continue; }
+    if (added.length >= room) { skipped.count += 1; continue; }
+    if (file.size > ATTACHMENT_MAX_BYTES) { skipped.size += 1; continue; }
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.src = url;
+    try {
+      await image.decode();
+    } catch {
+      URL.revokeObjectURL(url);
+      skipped.type += 1;
+      continue;
+    }
+    const attachment = {
+      id: newAttachmentId(),
+      name: file.name || 'image.png',
+      type: file.type,
+      size: file.size,
+      width: image.naturalWidth,
+      height: image.naturalHeight
+    };
+    sessionAttachmentIds.add(attachment.id);
+    try {
+      await attachmentStore('readwrite', (store) => store.put(file, attachment.id));
+    } catch {
+      URL.revokeObjectURL(url);
+      skipped.failed += 1;
+      continue;
+    }
+    attachmentUrls.set(attachment.id, url);
+    added.push(attachment);
+  }
+  const notes = [];
+  if (skipped.type) notes.push(`${skipped.type} not an image`);
+  if (skipped.size) notes.push(`${skipped.size} larger than ${ATTACHMENT_MAX_BYTES / 1024 / 1024} MB`);
+  if (skipped.count) notes.push(`${skipped.count} over the limit of ${ATTACHMENTS_PER_COMMENT} per comment`);
+  if (skipped.failed) notes.push(`${skipped.failed} could not be stored`);
+  if (notes.length) notify(`Some files were not attached: ${notes.join(', ')}.`, 'error');
+  return added;
+}
+
+function forgetAttachments(attachments) {
+  const ids = attachments.map((attachment) => attachment.id).filter(Boolean);
+  if (!ids.length) return;
+  ids.forEach((id) => {
+    const url = attachmentUrls.get(id);
+    if (url) URL.revokeObjectURL(url);
+    attachmentUrls.delete(id);
+  });
+  attachmentStore('readwrite', (store) => ids.forEach((id) => store.delete(id))).catch(() => { /* Pruned on the next start. */ });
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+// The HTML review carries its images inline, so it stays one file.
+async function embeddedAttachments(attachments) {
+  const embedded = await Promise.all(attachments.map(async ({ id, ...details }) => {
+    const blob = await attachmentBlob(id);
+    return blob ? { ...details, src: await blobToDataUrl(blob) } : null;
+  }));
+  return embedded.filter(Boolean);
+}
+
+// Images of an imported review are stored again under new ids.
+async function importedAttachments(sources) {
+  const stored = await Promise.all(sources.map(async (source) => {
+    if (typeof source?.src !== 'string' || !source.src.startsWith('data:image/')) return null;
+    try {
+      const blob = await (await fetch(source.src)).blob();
+      const attachment = {
+        id: newAttachmentId(),
+        name: String(source.name || 'image.png'),
+        type: blob.type,
+        size: blob.size,
+        width: Math.round(Number(source.width) || 0),
+        height: Math.round(Number(source.height) || 0)
+      };
+      sessionAttachmentIds.add(attachment.id);
+      await attachmentStore('readwrite', (store) => store.put(blob, attachment.id));
+      return attachment;
+    } catch {
+      return null;
+    }
+  }));
+  return stored.filter(Boolean);
+}
+
+// Drops stored images no saved comment refers to: drafts of a closed studio,
+// or images of comments removed while storage was unavailable.
+async function pruneAttachments() {
+  let keys;
+  try {
+    keys = await attachmentStore('readonly', (store) => store.getAllKeys());
+  } catch {
+    return;
+  }
+  if (!keys?.length) return;
+  const used = new Set([...sessionAttachmentIds, ...[...comments, { attachments: draftAttachments }].flatMap(commentAttachments).map((attachment) => attachment.id)]);
+  try {
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (!key?.startsWith(COMMENTS_STORAGE_PREFIX)) continue;
+      const stored = JSON.parse(localStorage.getItem(key) || '[]');
+      if (Array.isArray(stored)) stored.forEach((comment) => commentAttachments(comment).forEach((attachment) => used.add(attachment.id)));
+    }
+  } catch {
+    // Unreadable storage: better to keep every image than lose one in use.
+    return;
+  }
+  // Another studio tab may hold drafts not saved anywhere yet, so only
+  // images more than a day old (the id starts with its time) are dropped.
+  const dayAgo = Date.now() - (24 * 60 * 60 * 1000);
+  const stale = keys.filter((key) => !used.has(key) && parseInt(String(key).split('-')[1], 36) < dayAgo);
+  if (stale.length) attachmentStore('readwrite', (store) => stale.forEach((key) => store.delete(key))).catch(() => {});
+}
+
+// A row of image tiles. Clicking a tile opens the image; the cross removes it.
+function renderAttachmentTiles(attachments, { removable = false } = {}) {
+  const list = document.createElement('div');
+  list.className = 'comment-attachments';
+  attachments.forEach((attachment, index) => {
+    const tile = document.createElement('div');
+    tile.className = 'comment-attachment';
+    const open = document.createElement('button');
+    open.type = 'button';
+    open.className = 'comment-attachment-open';
+    open.dataset.action = 'open-image';
+    open.dataset.index = String(index);
+    open.title = attachment.name;
+    open.setAttribute('aria-label', `Open ${attachment.name}`);
+    const image = document.createElement('img');
+    image.alt = '';
+    image.draggable = false;
+    const url = attachmentUrls.get(attachment.id);
+    if (url) image.src = url;
+    else loadAttachmentUrl(attachment.id).then((loaded) => {
+      if (loaded) image.src = loaded;
+      else tile.classList.add('is-missing');
+    });
+    open.append(image);
+    tile.append(open);
+    if (removable) {
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'comment-attachment-remove';
+      remove.dataset.action = 'remove-image';
+      remove.dataset.index = String(index);
+      remove.title = 'Remove image';
+      remove.setAttribute('aria-label', `Remove ${attachment.name}`);
+      remove.innerHTML = window.phosphorIcon('x');
+      tile.append(remove);
+    }
+    list.append(tile);
+  });
+  return list;
+}
+
+function renderDraftAttachments() {
+  commentDraftAttachments.hidden = !draftAttachments.length;
+  commentDraftAttachments.replaceChildren(...(draftAttachments.length ? renderAttachmentTiles(draftAttachments, { removable: true }).childNodes : []));
+}
+
+async function attachToDraft(files) {
+  const added = await storeImageFiles(files, ATTACHMENTS_PER_COMMENT - draftAttachments.length);
+  if (!added.length) return;
+  draftAttachments = [...draftAttachments, ...added];
+  renderDraftAttachments();
+}
+
+async function attachToComment(id, files) {
+  const comment = commentById(id);
+  if (!comment) return;
+  const added = await storeImageFiles(files, ATTACHMENTS_PER_COMMENT - commentAttachments(comment).length);
+  // The comment may have been deleted while the files were read.
+  if (!added.length || !comments.includes(comment)) {
+    forgetAttachments(added);
+    return;
+  }
+  comment.attachments = [...commentAttachments(comment), ...added];
+  saveComments();
+  renderComments();
+  syncCommentMarkers();
+  notify(`${added.length === 1 ? 'Image' : `${added.length} images`} attached to comment ${comments.indexOf(comment) + 1}.`, 'success');
+}
+
+function removeCommentAttachment(id, index) {
+  const comment = commentById(id);
+  const attachments = commentAttachments(comment);
+  if (!attachments[index]) return;
+  const [removed] = attachments.splice(index, 1);
+  if (!attachments.length) delete comment.attachments;
+  forgetAttachments([removed]);
+  saveComments();
+  renderComments();
+  syncCommentMarkers();
+  notify(`Image removed from comment ${comments.indexOf(comment) + 1}.`);
+}
+
+function imageFilesFrom(dataTransfer) {
+  return [...(dataTransfer?.files || [])].filter((file) => file.type.startsWith('image/'));
+}
+
+// Full-size preview of a comment's images, with arrows between them.
+let imageViewerItems = [];
+let imageViewerIndex = 0;
+
+function showImageViewerItem(index) {
+  imageViewerIndex = (index + imageViewerItems.length) % imageViewerItems.length;
+  const attachment = imageViewerItems[imageViewerIndex];
+  imageViewerImage.removeAttribute('src');
+  imageViewerImage.alt = attachment.name;
+  loadAttachmentUrl(attachment.id).then((url) => {
+    if (imageViewerItems[imageViewerIndex] !== attachment) return;
+    if (url) imageViewerImage.src = url;
+  });
+  const size = attachment.width && attachment.height ? ` · ${attachment.width} × ${attachment.height}` : '';
+  const position = imageViewerItems.length > 1 ? ` · ${imageViewerIndex + 1} / ${imageViewerItems.length}` : '';
+  imageViewerCaption.textContent = `${attachment.name}${size}${position}`;
+  imageViewerPrev.hidden = imageViewerNext.hidden = imageViewerItems.length < 2;
+}
+
+function openImageViewer(attachments, index) {
+  if (!attachments[index]) return;
+  imageViewerItems = attachments.slice();
+  showImageViewerItem(index);
+  if (!imageViewer.open) imageViewer.showModal();
 }
 
 // Comments survive a closed studio tab or an extension reload. They are kept
@@ -885,13 +1213,16 @@ function commentIdentity(comment) {
   const target = comment.pin
     ? `pin:${Math.round(comment.pin.x)},${Math.round(comment.pin.y)}`
     : comment.element ? reviewElementKey(comment.element, comment.element.selector) : 'page';
-  return [canonicalInspectorUrl(comment.url), comment.viewport.width, comment.viewport.height, target, comment.comment].join('\u0000');
+  const images = commentAttachments(comment).map((attachment) => `${attachment.name}:${attachment.size}`).join('|');
+  return [canonicalInspectorUrl(comment.url), comment.viewport.width, comment.viewport.height, target, comment.comment, images].join('\u0000');
 }
 
 function isValidComment(comment) {
   return comment && typeof comment === 'object'
     && typeof comment.url === 'string'
-    && typeof comment.comment === 'string' && comment.comment.trim()
+    && typeof comment.comment === 'string'
+    && (!comment.attachments || (Array.isArray(comment.attachments) && comment.attachments.every((attachment) => attachment && typeof attachment.name === 'string')))
+    && (comment.comment.trim() || commentAttachments(comment).length)
     && Number.isFinite(comment.viewport?.width) && Number.isFinite(comment.viewport?.height)
     && (!comment.pin || (Number.isFinite(comment.pin.x) && Number.isFinite(comment.pin.y)));
 }
@@ -1002,6 +1333,8 @@ async function importReviewFile(file) {
   let duplicates = 0;
   let changes = 0;
   let done = 0;
+  // Comments whose images still have to be stored, with those images.
+  const withImages = [];
   data.pages.forEach((page) => {
     const url = canonicalInspectorUrl(String(page.url || ''));
     let route = '/';
@@ -1022,6 +1355,7 @@ async function importReviewFile(file) {
         const pin = entry.pin && Number.isFinite(entry.pin.x) && Number.isFinite(entry.pin.y)
           ? { x: Math.round(entry.pin.x), y: Math.round(entry.pin.y) }
           : null;
+        const images = Array.isArray(entry.attachments) ? entry.attachments.filter((image) => typeof image?.src === 'string') : [];
         const comment = {
           type: 'comment',
           url,
@@ -1031,7 +1365,9 @@ async function importReviewFile(file) {
           ...(pin ? { pin } : {}),
           ...(Array.isArray(viewport.steps) && viewport.steps.length ? { steps: viewport.steps } : {}),
           ...(!pin && element && entry.offset && Number.isFinite(entry.offset.x) && Number.isFinite(entry.offset.y) ? { offset: { x: Math.round(entry.offset.x), y: Math.round(entry.offset.y) } } : {}),
-          comment: String(entry.text || '')
+          comment: String(entry.text || ''),
+          // Names and sizes only for now: enough to tell duplicates apart.
+          ...(images.length ? { attachments: images.map((image) => ({ name: String(image.name || 'image.png'), size: Math.round(Number(image.size) || 0) })) } : {})
         };
         if (!isValidComment(comment)) return;
         const identity = commentIdentity(comment);
@@ -1041,10 +1377,23 @@ async function importReviewFile(file) {
         }
         known.add(identity);
         comments.push(comment);
+        if (images.length) withImages.push([comment, images]);
         added += 1;
       });
     });
   });
+  let lostImages = 0;
+  for (const [comment, images] of withImages) {
+    const stored = await importedAttachments(images);
+    lostImages += images.length - stored.length;
+    if (stored.length) comment.attachments = stored;
+    else delete comment.attachments;
+    // An image-only comment whose images could not be kept is dropped.
+    if (!comment.comment.trim() && !stored.length) {
+      comments.splice(comments.indexOf(comment), 1);
+      added -= 1;
+    }
+  }
   saveComments();
   renderComments();
   syncChangeUi();
@@ -1053,6 +1402,7 @@ async function importReviewFile(file) {
   if (done) notes.push(`${done} resolved skipped`);
   if (duplicates) notes.push(`${duplicates} already in the list`);
   if (changes) notes.push(`${changes} CSS change${changes === 1 ? '' : 's'} skipped`);
+  if (lostImages) notes.push(`${lostImages} image${lostImages === 1 ? '' : 's'} could not be stored`);
   notify(`Imported ${added} comment${added === 1 ? '' : 's'}${notes.length ? ` (${notes.join(', ')})` : ''}.`, added ? 'success' : undefined);
 }
 
@@ -1173,7 +1523,16 @@ async function applyChangesToFile(card) {
   }
 }
 
+// What agents get: comments with text, without their images. An image-only
+// comment is for the people reading the review; it says nothing to an agent.
+function agentComments() {
+  return comments
+    .filter((comment) => comment.comment.trim())
+    .map(({ attachments, ...comment }) => comment);
+}
+
 function formatChangeReport() {
+  const notes = agentComments();
   const createdAt = new Intl.DateTimeFormat('en-US', {
     dateStyle: 'medium', timeStyle: 'short'
   }).format(new Date());
@@ -1192,7 +1551,7 @@ function formatChangeReport() {
     '',
     `Created: ${createdAt}`,
     `Style changes: ${changeLog.size}`,
-    `Comments: ${comments.length}`,
+    `Comments: ${notes.length}`,
     `Viewports: ${viewportCount}`,
     '',
     'This file contains every saved inspector change across all pages and viewports in this session.'
@@ -1217,9 +1576,9 @@ function formatChangeReport() {
       });
     });
   });
-  if (comments.length) {
+  if (notes.length) {
     lines.push('', '## Comments');
-    comments.forEach((comment) => {
+    notes.forEach((comment) => {
       const target = comment.element?.selector ? ` · \`${escapeInlineCode(comment.element.selector)}\`` : ' · page-level';
       const rect = comment.pin ? { x: comment.pin.x, y: comment.pin.y } : comment.element?.rect;
       const position = rect ? ` · at ${rect.x}, ${rect.y}${Number.isFinite(rect.width) ? `, ${rect.width} × ${rect.height}` : ''}` : '';
@@ -1284,12 +1643,15 @@ function codexHandoff() {
     version: 2,
     instruction: CODEX_INSTRUCTION,
     changeSet: codexChangeSet(),
-    comments: comments.map((comment) => ({ ...comment }))
+    comments: agentComments()
   };
 }
 
 async function copyForCodex() {
-  if (!changeLog.size && !comments.length) return;
+  if (!changeLog.size && !agentComments().length) {
+    if (comments.length) notify('Nothing to copy: comments with only images are left out of the agent review.');
+    return;
+  }
   const payload = JSON.stringify(codexHandoff(), null, 2);
   try {
     await navigator.clipboard.writeText(payload);
@@ -1364,7 +1726,11 @@ function reviewItems() {
   };
 
   changeLog.forEach((change) => getGroup(change).changes.push(change));
-  comments.forEach((comment) => getGroup(comment).comments.push(comment.comment));
+  comments.forEach((comment) => {
+    const count = commentAttachments(comment).length;
+    const images = count ? `[${count} image${count === 1 ? '' : 's'} attached — see the HTML review]` : '';
+    getGroup(comment).comments.push([comment.comment, images].filter(Boolean).join(' '));
+  });
 
   return [...groups.values()].sort((left, right) => (
     left.url.localeCompare(right.url)
@@ -1943,7 +2309,11 @@ function reviewHtmlContexts() {
     context.entries.push({ ...entry, selector, element, pin, offset, targetId, order: context.entries.length });
   };
 
-  comments.forEach((comment) => addEntry(comment, { kind: 'comment', text: comment.comment }));
+  comments.forEach((comment) => addEntry(comment, {
+    kind: 'comment',
+    text: comment.comment,
+    ...(commentAttachments(comment).length ? { attachments: commentAttachments(comment) } : {})
+  }));
   changeLog.forEach((change) => addEntry(change, {
     kind: 'change',
     property: change.property,
@@ -2001,6 +2371,7 @@ function reviewHtmlViewport(context, pageIndex, viewportIndex, numberFrom) {
       shot
     };
     if (entry.kind === 'change') Object.assign(result, { property: entry.property, from: entry.from, to: entry.to });
+    if (entry.attachments?.length) result.attachments = entry.attachments;
     // Kept so the review can be imported back without losing the binding.
     if (entry.element) result.element = entry.element;
     if (entry.pin) {
@@ -2134,6 +2505,11 @@ async function downloadReviewHtml() {
     await Promise.all(Array.from({ length: workerCount }, () => captureNextContext()));
 
     reviewExportButton.textContent = 'Building review...';
+    for (const context of contexts) {
+      for (const entry of context.entries) {
+        if (entry.attachments?.length) entry.attachments = await embeddedAttachments(entry.attachments);
+      }
+    }
     const html = await buildReviewHtml(reviewHtmlData(contexts));
     const objectUrl = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
     try {
@@ -3158,6 +3534,96 @@ layersPanelClose.addEventListener('click', () => setLayersOpen(false));
 commentsToggle.addEventListener('click', () => setCommentsOpen(commentsPanel.hidden));
 commentsPanelClose.addEventListener('click', () => setCommentsOpen(false));
 commentsForm.addEventListener('submit', (event) => { event.preventDefault(); addComment(commentInput.value); });
+commentAttachButton.addEventListener('click', () => {
+  delete commentAttachInput.dataset.commentId;
+  commentAttachInput.click();
+});
+// One file input serves the new comment and, via its menu, an existing one.
+commentAttachInput.addEventListener('change', () => {
+  const files = [...(commentAttachInput.files || [])];
+  const { commentId: targetId } = commentAttachInput.dataset;
+  commentAttachInput.value = '';
+  delete commentAttachInput.dataset.commentId;
+  if (!files.length) return;
+  if (targetId) attachToComment(targetId, files);
+  else attachToDraft(files);
+});
+commentDraftAttachments.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-action]');
+  const index = Number(button?.dataset.index);
+  if (!draftAttachments[index]) return;
+  if (button.dataset.action === 'open-image') {
+    openImageViewer(draftAttachments, index);
+  } else if (button.dataset.action === 'remove-image') {
+    forgetAttachments(draftAttachments.splice(index, 1));
+    renderDraftAttachments();
+    commentInput.focus();
+  }
+});
+// A pasted image goes to the comment being written, or being edited.
+commentsPanel.addEventListener('paste', (event) => {
+  const files = imageFilesFrom(event.clipboardData);
+  if (!files.length) return;
+  if (event.target === commentInput) {
+    event.preventDefault();
+    attachToDraft(files);
+  } else if (event.target.classList?.contains('comment-edit-input') && editingCommentId) {
+    event.preventDefault();
+    attachToComment(editingCommentId, files);
+  }
+});
+// Images dropped on the form go to the new comment; dropped on a comment,
+// they are added to it.
+let commentDropTarget = null;
+function setCommentDropTarget(target) {
+  if (commentDropTarget === target) return;
+  commentDropTarget?.classList.remove('is-drop-target');
+  commentDropTarget = target;
+  commentDropTarget?.classList.add('is-drop-target');
+}
+function commentDropTargetFor(event) {
+  if (![...(event.dataTransfer?.types || [])].includes('Files')) return null;
+  return event.target.closest?.('.comments-form, .comment-item') || null;
+}
+commentsPanel.addEventListener('dragover', (event) => {
+  if (![...(event.dataTransfer?.types || [])].includes('Files')) return;
+  // Anywhere else in the panel a drop must not open the file in the tab.
+  event.preventDefault();
+  const target = commentDropTargetFor(event);
+  event.dataTransfer.dropEffect = target ? 'copy' : 'none';
+  setCommentDropTarget(target);
+});
+commentsPanel.addEventListener('dragleave', (event) => {
+  if (!commentsPanel.contains(event.relatedTarget)) setCommentDropTarget(null);
+});
+commentsPanel.addEventListener('drop', (event) => {
+  const target = commentDropTargetFor(event);
+  setCommentDropTarget(null);
+  if (![...(event.dataTransfer?.types || [])].includes('Files')) return;
+  event.preventDefault();
+  const files = imageFilesFrom(event.dataTransfer);
+  if (!target || !files.length) return;
+  if (target.classList.contains('comments-form')) attachToDraft(files);
+  else attachToComment(target.dataset.commentId, files);
+});
+imageViewerPrev.addEventListener('click', () => showImageViewerItem(imageViewerIndex - 1));
+imageViewerNext.addEventListener('click', () => showImageViewerItem(imageViewerIndex + 1));
+document.querySelector('#image-viewer-close').addEventListener('click', () => imageViewer.close());
+// A click on the dimmed backdrop, not on the image or its controls, closes it.
+imageViewer.addEventListener('click', (event) => {
+  if (event.target === imageViewer || event.target.id === 'image-viewer-stage') imageViewer.close();
+});
+imageViewer.addEventListener('keydown', (event) => {
+  // Studio shortcuts and Escape handlers behind the preview stay out of it;
+  // the dialog still closes itself on Escape.
+  event.stopPropagation();
+  if (event.key === 'ArrowLeft' && imageViewerItems.length > 1) showImageViewerItem(imageViewerIndex - 1);
+  else if (event.key === 'ArrowRight' && imageViewerItems.length > 1) showImageViewerItem(imageViewerIndex + 1);
+});
+imageViewer.addEventListener('close', () => {
+  imageViewerItems = [];
+  imageViewerImage.removeAttribute('src');
+});
 
 function handleStudioShortcut(shortcut) {
   switch (shortcut) {
@@ -3232,6 +3698,19 @@ commentsList.addEventListener('click', (event) => {
     startCommentEdit(id);
     return;
   }
+  if (action === 'open-image') {
+    openImageViewer(commentAttachments(comment), Number(event.target.closest('[data-index]').dataset.index));
+    return;
+  }
+  if (action === 'remove-image') {
+    removeCommentAttachment(id, Number(event.target.closest('[data-index]').dataset.index));
+    return;
+  }
+  if (action === 'add-image') {
+    commentAttachInput.dataset.commentId = id;
+    commentAttachInput.click();
+    return;
+  }
   if (action === 'edit-save') {
     saveCommentEdit();
     return;
@@ -3245,6 +3724,7 @@ commentsList.addEventListener('click', (event) => {
   if (action === 'delete') {
     if (editingCommentId === id) editingCommentId = null;
     comments.splice(comments.indexOf(comment), 1);
+    forgetAttachments(commentAttachments(comment));
     if (selectedCommentId === id) selectedCommentId = null;
     if (placingCommentId === id) placingCommentId = null;
     if (pendingFocusCommentId === id) pendingFocusCommentId = null;
@@ -3315,7 +3795,7 @@ function stopCommentEdit() {
 function saveCommentEdit() {
   const comment = editingCommentId && commentById(editingCommentId);
   const text = editingCommentDraft.trim();
-  if (!comment || !text) return;
+  if (!comment || (!text && !commentAttachments(comment).length)) return;
   const changed = comment.comment !== text;
   comment.comment = text;
   editingCommentId = null;
@@ -3384,7 +3864,7 @@ commentsList.addEventListener('input', (event) => {
   if (!event.target.classList.contains('comment-edit-input')) return;
   editingCommentDraft = event.target.value;
   const save = event.target.closest('.comment-edit')?.querySelector('[data-action="edit-save"]');
-  if (save) save.disabled = !editingCommentDraft.trim();
+  if (save) save.disabled = !editingCommentDraft.trim() && !commentAttachments(commentById(editingCommentId)).length;
 });
 commentsList.addEventListener('keydown', (event) => {
   if (!event.target.classList.contains('comment-edit-input')) return;
@@ -3442,6 +3922,7 @@ function deleteAllComments() {
   if (!comments.length) return;
   const count = comments.length;
   if (!window.confirm(`Delete all ${count} comment${count === 1 ? '' : 's'} on every page?\n\nThis cannot be undone.`)) return;
+  forgetAttachments(comments.flatMap(commentAttachments));
   comments.splice(0);
   selectedCommentId = null;
   placingCommentId = null;
@@ -3637,3 +4118,4 @@ render();
 restoreComments();
 syncChangeUi();
 checkFileSchemeAccess();
+pruneAttachments();

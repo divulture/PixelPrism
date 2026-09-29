@@ -92,8 +92,13 @@
         <button type="button" class="comments-panel-close" id="comments-panel-close" aria-label="Close Comments" title="Close Comments"><span data-phosphor-icon="x"></span></button>
       </header>
       <form class="comments-form" id="comments-form">
-        <textarea id="comment-input" name="comment" rows="4" maxlength="2000" aria-label="Comment" placeholder="Write a comment..."></textarea>
-        <button type="submit">Add</button>
+        <textarea id="comment-input" name="comment" rows="4" maxlength="2000" aria-label="Comment" placeholder="Write a comment or paste an image..."></textarea>
+        <div class="comment-attachments" id="comment-draft-attachments" hidden></div>
+        <div class="comments-form-actions">
+          <button type="button" class="comment-attach tooltip-trigger" id="comment-attach" aria-label="Attach images" data-tooltip="Attach images"><span data-phosphor-icon="paperclip"></span></button>
+          <button type="submit">Add</button>
+        </div>
+        <input type="file" id="comment-attach-input" accept="image/*" multiple hidden>
       </form>
       <section class="comments-list-wrap" aria-labelledby="comments-list-title">
         <div class="comments-list-header">
@@ -109,6 +114,17 @@
         <p class="comments-empty" id="comments-empty">No comments added yet.</p>
       </section>
     </aside>
+    <dialog class="image-viewer" id="image-viewer" aria-labelledby="image-viewer-caption">
+      <header class="image-viewer-bar">
+        <p id="image-viewer-caption"></p>
+        <button type="button" class="image-viewer-close" id="image-viewer-close" aria-label="Close preview" title="Close (Esc)"><span data-phosphor-icon="x"></span></button>
+      </header>
+      <div class="image-viewer-stage" id="image-viewer-stage">
+        <button type="button" class="image-viewer-nav" id="image-viewer-prev" aria-label="Previous image" title="Previous image (←)"><span data-phosphor-icon="caret-left"></span></button>
+        <img id="image-viewer-image" alt="">
+        <button type="button" class="image-viewer-nav" id="image-viewer-next" aria-label="Next image" title="Next image (→)"><span data-phosphor-icon="caret-right"></span></button>
+      </div>
+    </dialog>
     <div class="handoff-fab" id="handoff-fab" hidden>
       <button class="handoff-fab-toggle" id="handoff-fab-toggle" type="button" aria-label="Open changes handoff" title="Changes handoff" aria-expanded="false">
         <span data-phosphor-icon="download"></span>

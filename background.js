@@ -57,6 +57,21 @@ function waitForTabLoad(tabId, timeout = 12000) {
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// A background tab rasters its layers lazily: the first full-size capture
+// can miss whole layers, such as a sticky sidebar or table of contents that
+// are in the DOM but not painted yet. That capture makes Chrome paint them,
+// so screenshots are taken until two in a row match.
+async function captureStableScreenshot(capture) {
+  let result = await capture();
+  for (let attempt = 0; attempt < 4 && result?.data; attempt += 1) {
+    await pause(150);
+    const next = await capture();
+    if (!next?.data || next.data === result.data) break;
+    result = next;
+  }
+  return result;
+}
+
 async function stylesheetTextFromDebugger(tabId, url) {
   const debuggee = { tabId };
   const headers = [];
@@ -133,12 +148,12 @@ async function captureViewport({ url, width, height, returnWindowId }) {
     await chrome.debugger.sendCommand(debuggee, 'Page.navigate', { url });
     await waitForTabLoad(previewTab.id);
     await waitForCaptureReady(debuggee);
-    const result = await chrome.debugger.sendCommand(debuggee, 'Page.captureScreenshot', {
+    const result = await captureStableScreenshot(() => chrome.debugger.sendCommand(debuggee, 'Page.captureScreenshot', {
       format: 'png',
       clip: { x: 0, y: 0, width: viewportWidth, height: viewportHeight, scale: 1 },
       captureBeyondViewport: true,
       fromSurface: true
-    });
+    }));
     if (!result?.data) throw new Error('Chrome did not return an image for the screenshot.');
     return `data:image/png;base64,${result.data}`;
   } finally {
@@ -564,13 +579,13 @@ async function captureReviewContext({ url, width, height, changes, targets = [],
         returnByValue: true
       });
       if (prepared?.exceptionDetails) throw new Error('A review target could not be prepared for capture.');
-      const result = await reviewDebuggerCommand(debuggee, 'Page.captureScreenshot', {
+      const result = await captureStableScreenshot(() => reviewDebuggerCommand(debuggee, 'Page.captureScreenshot', {
         format: 'jpeg',
         quality: 84,
         clip: { x: prepared?.result?.value?.scrollX || 0, y: prepared?.result?.value?.scrollY || 0, width: viewportWidth, height: viewportHeight, scale: 1 },
         captureBeyondViewport: false,
         fromSurface: true
-      });
+      }));
       if (!result?.data) throw new Error('Chrome did not return a review screenshot.');
       captures.push({
         id: entry.id,
@@ -803,13 +818,13 @@ async function captureReviewShot(debuggee, targets, scrollY, width, height) {
   await settleReviewFrames(debuggee, 2);
   const measurement = await measureReviewTargets(debuggee, targets);
   // Clip coordinates are document-relative, so the clip follows the scroll.
-  const result = await reviewDebuggerCommand(debuggee, 'Page.captureScreenshot', {
+  const result = await captureStableScreenshot(() => reviewDebuggerCommand(debuggee, 'Page.captureScreenshot', {
     format: 'jpeg',
     quality: 84,
     clip: { x: 0, y: measurement.scrollY, width, height, scale: 1 },
     captureBeyondViewport: false,
     fromSurface: true
-  });
+  }));
   if (!result?.data) throw new Error('Chrome did not return a review screenshot.');
   return { measurement, dataUrl: `data:image/jpeg;base64,${result.data}` };
 }
