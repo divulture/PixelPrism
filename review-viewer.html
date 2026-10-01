@@ -68,6 +68,14 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
 .page-item-name { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--text); text-overflow: ellipsis; white-space: nowrap; }
 .page-item-count { flex: none; color: var(--muted); font-size: 10px; font-weight: 400; font-variant-numeric: tabular-nums; }
 .page-item.is-complete .page-item-count { color: var(--done); }
+/* A page captured at several sizes opens into one row per size. */
+.page-item-toggle { display: grid; flex: none; place-items: center; width: 12px; height: 16px; margin-right: -4px; color: var(--faint); }
+.page-item-toggle svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; transition: transform 120ms ease; }
+.page-item[aria-expanded="true"] .page-item-toggle svg { transform: rotate(90deg); }
+.page-item-toggle:hover { color: var(--ink); }
+.page-children { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin: 8px 0 0; padding: 0; list-style: none; }
+/* A size's icon lines up with its page's name. */
+.page-item.is-viewport { padding-left: 45px; }
 
 .stage-wrap { position: relative; display: grid; grid-template-rows: 44px minmax(0, 1fr); min-width: 0; min-height: 0; background: var(--stage); }
 .place-hint { position: absolute; top: 56px; left: 50%; z-index: 5; display: flex; align-items: center; gap: 10px; max-width: calc(100% - 24px); padding: 6px 6px 6px 12px; border-radius: 6px; background: var(--ink); color: #fff; box-shadow: 0 6px 20px rgba(24, 24, 27, .25); font-size: 11px; font-weight: 600; transform: translateX(-50%); }
@@ -278,7 +286,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
   const CHECK_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg>';
   const DOTS_ICON = '<svg viewBox="0 0 256 256" aria-hidden="true"><path d="M140,128a12,12,0,1,1-12-12A12,12,0,0,1,140,128Zm56-12a12,12,0,1,0,12,12A12,12,0,0,0,196,116ZM60,116a12,12,0,1,0,12,12A12,12,0,0,0,60,116Z"/></svg>';
 
-  const state = { page: 0, viewport: 0, shot: 0, selected: null, expanded: null, menu: null, placing: null, zoom: 1, fit: true, done: new Set(), unsaved: false };
+  // scope: null shows every size of the page; a viewport index shows only that size.
+  const state = { page: 0, viewport: 0, scope: null, open: new Set([0]), shot: 0, selected: null, expanded: null, menu: null, placing: null, zoom: 1, fit: true, done: new Set(), unsaved: false };
   // Checkmarks and points not yet written into the file live in
   // localStorage; once the file is saved, the file is the source of truth.
   const resolvedKey = (ids) => JSON.stringify([...ids].sort());
@@ -342,6 +351,11 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
   // A page captured in one of its tabs is named after it: 1440 × 900 · Active.
   const viewportLabel = (viewport) => `${viewport.width} × ${viewport.height}${viewport.state ? ` · ${viewport.state}` : ''}`;
   const currentShot = () => currentViewport().shots[state.shot] || null;
+  // The sizes whose comments are listed: all of them, or the one picked.
+  const visibleViewports = () => currentPage().viewports
+    .map((viewport, viewportIndex) => ({ viewport, viewportIndex }))
+    .filter(({ viewportIndex }) => state.scope === null || viewportIndex === state.scope);
+  const visibleEntries = () => visibleViewports().flatMap(({ viewport }) => viewport.entries);
 
   // Manual points. The automatic placement is kept in entry.auto so a point
   // can be undone; entry.pin is in page coordinates so the studio can put it
@@ -429,21 +443,65 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     $('#progress-fill').style.width = all.length ? `${(done / all.length) * 100}%` : '0';
   }
 
+  function pageRow(entries, { className, name, title, width, current }) {
+    const done = entries.filter((entry) => state.done.has(entry.id)).length;
+    const button = el('button', className);
+    button.type = 'button';
+    button.title = title;
+    button.setAttribute('aria-current', String(current));
+    button.classList.toggle('is-complete', entries.length > 0 && done === entries.length);
+    const icon = el('span', 'page-item-icon');
+    icon.innerHTML = deviceIconSvg(width);
+    button.append(icon, el('span', 'page-item-name', name), el('span', 'page-item-count', `${done}/${entries.length}`));
+    return button;
+  }
+
+  // A page with one size is a single row. A page with several opens into a
+  // row per size: the page row shows the comments of every size, a size row
+  // only that size's comments.
   function renderPages() {
+    const hasTree = data.pages.some((page) => page.viewports.length > 1);
     $('#pages-list').replaceChildren(...data.pages.map((page, index) => {
-      const entries = pageEntries(page);
-      const done = entries.filter((entry) => state.done.has(entry.id)).length;
       const item = el('li');
-      const button = el('button', 'page-item');
-      button.type = 'button';
+      const isTree = page.viewports.length > 1;
+      const isOpen = isTree && state.open.has(index);
+      const button = pageRow(pageEntries(page), {
+        className: 'page-item',
+        name: page.label,
+        title: page.url,
+        width: page.viewports[0]?.width || 0,
+        current: index === state.page && (state.scope === null || !isTree)
+      });
       button.dataset.page = String(index);
-      button.setAttribute('aria-current', String(index === state.page));
-      button.classList.toggle('is-complete', entries.length > 0 && done === entries.length);
-      button.title = page.url;
-      const icon = el('span', 'page-item-icon');
-      icon.innerHTML = deviceIconSvg(page.viewports[0]?.width || 0);
-      button.append(icon, el('span', 'page-item-name', page.label), el('span', 'page-item-count', `${done}/${entries.length}`));
+      if (hasTree) {
+        const toggle = el('span', 'page-item-toggle');
+        if (isTree) {
+          toggle.dataset.toggle = String(index);
+          toggle.title = isOpen ? 'Hide sizes' : 'Show sizes';
+          toggle.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5L10.5 8 6 12.5"/></svg>';
+          button.setAttribute('aria-expanded', String(isOpen));
+        }
+        button.prepend(toggle);
+      }
       item.append(button);
+      if (isOpen) {
+        const children = el('ol', 'page-children');
+        children.append(...page.viewports.map((viewport, viewportIndex) => {
+          const child = el('li');
+          const row = pageRow(viewport.entries, {
+            className: 'page-item is-viewport',
+            name: viewportLabel(viewport),
+            title: `${page.url} · ${viewportLabel(viewport)}`,
+            width: viewport.width,
+            current: index === state.page && state.scope === viewportIndex
+          });
+          row.dataset.page = String(index);
+          row.dataset.viewport = String(viewportIndex);
+          child.append(row);
+          return child;
+        }));
+        item.append(children);
+      }
       return item;
     }));
   }
@@ -526,13 +584,12 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
   }
 
   function renderComments() {
-    const page = currentPage();
-    const entries = pageEntries(page);
+    const entries = visibleEntries();
     const done = entries.filter((entry) => state.done.has(entry.id)).length;
     const count = $('#comments-count');
     count.textContent = `${done}/${entries.length}`;
     count.classList.toggle('is-complete', entries.length > 0 && done === entries.length);
-    $('#comments-groups').replaceChildren(...page.viewports.map((viewport, viewportIndex) => {
+    $('#comments-groups').replaceChildren(...visibleViewports().map(({ viewport, viewportIndex }) => {
       const group = el('section', 'vp-group');
       group.classList.toggle('is-active', viewportIndex === state.viewport);
       const header = el('button', 'vp-header');
@@ -640,7 +697,10 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
         item.append(meta);
         list.append(item);
       });
-      group.append(header, list);
+      // With one size picked in the pages list, its name there is the header.
+      if (state.scope === null) group.append(header);
+      if (viewport.entries.length || state.scope === null) group.append(list);
+      else group.append(el('p', 'empty-note', 'No comments at this size.'));
       return group;
     }));
     // Near the bottom of the panel the menu opens upwards to stay visible.
@@ -1077,6 +1137,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     markChanged();
     stopPlacing();
     const moved = target.page !== state.page || target.viewport !== state.viewport;
+    if (target.page !== state.page) state.scope = null;
+    else if (state.scope !== null) state.scope = target.viewport;
     Object.assign(state, { page: target.page, viewport: target.viewport, shot: target.shot });
     if (moved) state.selected = null;
     render();
@@ -1128,18 +1190,35 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     input.click();
   }
 
-  function selectPage(index) {
-    if (index === state.page) return;
+  // scope is null for the whole page, or the index of one of its sizes.
+  function selectPage(index, scope = null) {
+    if (scope === null && data.pages[index].viewports.length > 1) state.open.add(index);
+    if (index === state.page && scope === state.scope) {
+      renderPages();
+      return;
+    }
     stopPlacing();
+    // Going back to the whole page keeps the size on screen.
+    const viewport = scope ?? (index === state.page ? state.viewport : 0);
+    const stageChanged = index !== state.page || viewport !== state.viewport;
     state.page = index;
-    state.viewport = 0;
-    state.shot = 0;
-    state.selected = null;
-    state.expanded = null;
+    state.scope = scope;
+    state.viewport = viewport;
+    if (stageChanged) {
+      state.shot = 0;
+      state.selected = null;
+      state.expanded = null;
+    }
     state.menu = null;
     render();
-    renderStage();
+    if (stageChanged) renderStage();
     $('#comments-groups').scrollTop = 0;
+  }
+
+  function togglePageOpen(index, open = !state.open.has(index)) {
+    if (open) state.open.add(index);
+    else state.open.delete(index);
+    renderPages();
   }
 
   function selectViewport(index) {
@@ -1160,11 +1239,15 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     if (state.placing && state.placing !== id) stopPlacing();
     const pageChanged = found.pageIndex !== state.page;
     const viewportChanged = pageChanged || found.viewportIndex !== state.viewport || found.entry.shot !== state.shot;
+    // A comment from another size switches the filter to that size.
+    const scope = pageChanged ? null : state.scope === null ? null : found.viewportIndex;
+    const scopeChanged = pageChanged || scope !== state.scope;
     state.page = found.pageIndex;
+    state.scope = scope;
     state.viewport = found.viewportIndex;
     state.shot = found.entry.shot || 0;
     state.selected = state.selected === id && fromMarker ? null : id;
-    if (pageChanged) renderPages();
+    if (scopeChanged) renderPages();
     renderComments();
     if (viewportChanged) renderStage();
     else renderOverlay();
@@ -1209,7 +1292,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
   }
 
   function moveSelection(direction) {
-    const entries = pageEntries(currentPage());
+    const entries = visibleEntries();
     if (!entries.length) return;
     const index = entries.findIndex((entry) => entry.id === state.selected);
     const next = index < 0 ? (direction > 0 ? 0 : entries.length - 1) : Math.min(entries.length - 1, Math.max(0, index + direction));
@@ -1218,8 +1301,24 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
 
   // Events
   $('#pages-list').addEventListener('click', (event) => {
+    const toggle = event.target.closest('[data-toggle]');
+    if (toggle) {
+      togglePageOpen(Number(toggle.dataset.toggle));
+      return;
+    }
     const button = event.target.closest('[data-page]');
-    if (button) selectPage(Number(button.dataset.page));
+    if (!button) return;
+    const { page, viewport } = button.dataset;
+    selectPage(Number(page), viewport === undefined ? null : Number(viewport));
+  });
+  // Right and Left open and close a page's sizes, as in a file tree.
+  $('#pages-list').addEventListener('keydown', (event) => {
+    const button = event.target.closest('[aria-expanded]');
+    if (!button || (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    togglePageOpen(Number(button.dataset.page), event.key === 'ArrowRight');
+    $(`#pages-list .page-item[data-page="${button.dataset.page}"]:not([data-viewport])`)?.focus();
   });
 
   // Full-size preview of a comment's images.

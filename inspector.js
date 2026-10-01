@@ -205,6 +205,31 @@
     event.stopImmediatePropagation();
     window.parent.postMessage({ source: 'viewport-parade', type: 'studio-shortcut', shortcut }, extensionOrigin);
   }, true);
+  // The element that scrolls the page. Usually the window, but app-like sites
+  // often keep the window still and scroll a full-screen container instead,
+  // sometimes only at some widths. Page positions are kept in its scroll
+  // coordinates, as the review capture expects (REVIEW_SCROLLER_HELPERS in
+  // background.js). Cached briefly: markers ask on every scroll frame.
+  let pageScrollerCache = null;
+  const pageScroller = () => {
+    const now = performance.now();
+    if (pageScrollerCache && now - pageScrollerCache.time < 1000 && pageScrollerCache.element?.isConnected !== false) return pageScrollerCache.element;
+    const root = document.scrollingElement || document.documentElement;
+    let range = root.scrollHeight - window.innerHeight;
+    let best = null;
+    if (range <= window.innerHeight / 4) {
+      for (const element of document.body ? document.body.querySelectorAll('*') : []) {
+        const elementRange = element.scrollHeight - element.clientHeight;
+        if (elementRange <= range || element.clientHeight < window.innerHeight / 2 || element.clientWidth < window.innerWidth / 2) continue;
+        if (element.closest('[data-viewport-parade-overlay]') || !/(auto|scroll|overlay)/.test(getComputedStyle(element).overflowY)) continue;
+        best = element;
+        range = elementRange;
+      }
+    }
+    pageScrollerCache = { element: best, time: now };
+    return best;
+  };
+  const pageScrollY = () => pageScroller()?.scrollTop ?? window.scrollY;
   // Describes an element so it can be found again on a fresh load. Used by
   // the tools and by the click recorder, which runs before they are set up.
   const truncate = (value, limit = 240) => {
@@ -285,7 +310,7 @@
       // element cannot be found again, this still says where it was.
       rect: {
         x: Math.round(box.left + window.scrollX),
-        y: Math.round(box.top + window.scrollY),
+        y: Math.round(box.top + pageScrollY()),
         width: Math.round(box.width),
         height: Math.round(box.height)
       },
@@ -1509,10 +1534,10 @@
     return rect && [rect.x, rect.y, rect.width, rect.height].every(Number.isFinite) ? rect : null;
   };
   const markerRectFor = (marker) => {
-    if (marker.pin) return { left: marker.pin.x - window.scrollX, top: marker.pin.y - window.scrollY, width: 0, height: 0 };
+    if (marker.pin) return { left: marker.pin.x - window.scrollX, top: marker.pin.y - pageScrollY(), width: 0, height: 0 };
     if (marker.state === 'approx') {
       const rect = recordedRectFor(marker);
-      return { left: rect.x - window.scrollX, top: rect.y - window.scrollY, width: rect.width, height: rect.height };
+      return { left: rect.x - window.scrollX, top: rect.y - pageScrollY(), width: rect.width, height: rect.height };
     }
     return marker.state === 'placed' && marker.target?.isConnected ? marker.target.getBoundingClientRect() : null;
   };
@@ -1606,8 +1631,9 @@
     selectedCommentId = id;
     if (!marker) return;
     const recorded = marker.state === 'approx' ? recordedRectFor(marker) : null;
-    if (marker.pin) window.scrollTo({ top: Math.max(0, marker.pin.y - (innerHeight / 2)), behavior: 'smooth' });
-    else if (recorded) window.scrollTo({ top: Math.max(0, recorded.y + (recorded.height / 2) - (innerHeight / 2)), behavior: 'smooth' });
+    const scroller = pageScroller() || window;
+    if (marker.pin) scroller.scrollTo({ top: Math.max(0, marker.pin.y - (innerHeight / 2)), behavior: 'smooth' });
+    else if (recorded) scroller.scrollTo({ top: Math.max(0, recorded.y + (recorded.height / 2) - (innerHeight / 2)), behavior: 'smooth' });
     else if (marker.target && marker.state === 'placed') marker.target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
     marker.node.classList.remove('is-pulse');
     void marker.node.offsetWidth;
@@ -1629,7 +1655,7 @@
     // The page background, or a wrapper bigger than a good part of the
     // screen, is no target worth binding to: keep the dropped point instead.
     if (!element || rect.width * rect.height > innerWidth * innerHeight * 0.4) {
-      return { pin: { x: Math.round(x + window.scrollX), y: Math.round(y + window.scrollY) } };
+      return { pin: { x: Math.round(x + window.scrollX), y: Math.round(y + pageScrollY()) } };
     }
     return { element, rect, same: element === current };
   };

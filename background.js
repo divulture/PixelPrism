@@ -255,11 +255,32 @@ const REVIEW_ELEMENT_HELPERS = `
     };
 `;
 
+// The element that scrolls the page. Usually the window, but app-like sites
+// often keep the window still and scroll a full-screen container instead,
+// sometimes only at some widths. Mirrors pageScroller() in inspector.js.
+const REVIEW_SCROLLER_HELPERS = `
+    const pageScroller = () => {
+      const root = document.scrollingElement || document.documentElement;
+      let range = root.scrollHeight - window.innerHeight;
+      if (range > window.innerHeight / 4) return null;
+      let best = null;
+      for (const element of document.body ? document.body.querySelectorAll('*') : []) {
+        const elementRange = element.scrollHeight - element.clientHeight;
+        if (elementRange <= range || element.clientHeight < window.innerHeight / 2 || element.clientWidth < window.innerWidth / 2) continue;
+        if (!/(auto|scroll|overlay)/.test(getComputedStyle(element).overflowY)) continue;
+        best = element;
+        range = elementRange;
+      }
+      return best;
+    };
+`;
+
 function reviewPreparationExpression({ changes = [], target, marker }) {
   const payload = JSON.stringify({ changes, target, marker });
   return `(async () => {
     const payload = ${payload};
     ${REVIEW_ELEMENT_HELPERS}
+    ${REVIEW_SCROLLER_HELPERS}
 
     payload.changes.forEach((change) => {
       const element = elementFor(change);
@@ -301,7 +322,7 @@ function reviewPreparationExpression({ changes = [], target, marker }) {
       ].join(';');
       overlay.append(badge);
       document.documentElement.append(overlay);
-    } else if (!payload.target) window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    } else if (!payload.target) (pageScroller() || window).scrollTo({ top: 0, left: 0, behavior: 'instant' });
     return { highlighted: Boolean(targetElement), scrollX: window.scrollX, scrollY: window.scrollY };
   })()`;
 }
@@ -657,6 +678,7 @@ function reviewMeasureExpression(targets) {
   return `(() => {
     const targets = ${payload};
     ${REVIEW_ELEMENT_HELPERS}
+    ${REVIEW_SCROLLER_HELPERS}
     const isFixed = (element) => {
       for (let node = element; node && node !== document.documentElement; node = node.parentElement) {
         if (getComputedStyle(node).position === 'fixed') return true;
@@ -664,11 +686,18 @@ function reviewMeasureExpression(targets) {
       return false;
     };
     const root = document.documentElement;
+    const scroller = pageScroller();
+    // scrollY is the page scroll that places elements; clipY is where the
+    // screenshot clip starts, which stays with the window.
+    const scrollY = scroller ? scroller.scrollTop : window.scrollY;
     return {
-      scrollY: window.scrollY,
+      scrollY,
+      clipY: window.scrollY,
       viewportWidth: window.innerWidth,
       viewportHeight: window.innerHeight,
-      documentHeight: Math.max(root.scrollHeight, document.body?.scrollHeight || 0, root.clientHeight),
+      documentHeight: scroller
+        ? window.innerHeight + scroller.scrollHeight - scroller.clientHeight
+        : Math.max(root.scrollHeight, document.body?.scrollHeight || 0, root.clientHeight),
       rects: targets.map(({ id, target }) => {
         // A point placed by hand in a review, in document coordinates.
         const pin = target && target.pin;
@@ -691,9 +720,10 @@ function reviewMeasureExpression(targets) {
           id,
           found: true,
           visible,
-          fixed: isFixed(element),
+          // Outside the scrolling container an element stays put, like a fixed one.
+          fixed: isFixed(element) || Boolean(scroller && !scroller.contains(element)),
           x: rect.left + window.scrollX,
-          y: rect.top + window.scrollY,
+          y: rect.top + scrollY,
           width: rect.width,
           height: rect.height
         };
@@ -811,17 +841,20 @@ function reviewRectForShot(rect, scrollY) {
 
 async function captureReviewShot(debuggee, targets, scrollY, width, height) {
   await reviewDebuggerCommand(debuggee, 'Runtime.evaluate', {
-    expression: `window.scrollTo({ top: ${scrollY}, left: 0, behavior: 'instant' })`
+    expression: `(() => {
+      ${REVIEW_SCROLLER_HELPERS}
+      (pageScroller() || window).scrollTo({ top: ${scrollY}, left: 0, behavior: 'instant' });
+    })()`
   });
   await settleReviewFrames(debuggee);
   await waitForReviewImages(debuggee);
   await settleReviewFrames(debuggee, 2);
   const measurement = await measureReviewTargets(debuggee, targets);
-  // Clip coordinates are document-relative, so the clip follows the scroll.
+  // Clip coordinates are document-relative, so the clip follows the window scroll.
   const result = await captureStableScreenshot(() => reviewDebuggerCommand(debuggee, 'Page.captureScreenshot', {
     format: 'jpeg',
     quality: 84,
-    clip: { x: 0, y: measurement.scrollY, width, height, scale: 1 },
+    clip: { x: 0, y: measurement.clipY, width, height, scale: 1 },
     captureBeyondViewport: false,
     fromSurface: true
   }));
