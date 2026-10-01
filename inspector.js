@@ -1,5 +1,5 @@
 (() => {
-  const INSPECTOR_PROTOCOL_VERSION = 14;
+  const INSPECTOR_PROTOCOL_VERSION = 15;
   // The content script is registered for web pages so it can run inside Studio's
   // cross-origin preview iframe. Do not create any DOM or listeners on a normal
   // browsing tab: wait until the extension page explicitly enables a tool.
@@ -176,9 +176,19 @@
   // Router calls to history.pushState run in the page's world, where a patch
   // made from this isolated content script is invisible. Navigation API
   // events are shared by both worlds, so SPA route changes are reported too.
-  window.navigation?.addEventListener('currententrychange', () => setTimeout(() => reportPreviewNavigation(location.href), 0));
-  window.addEventListener('popstate', () => setTimeout(() => reportPreviewNavigation(location.href), 0));
-  window.addEventListener('hashchange', () => setTimeout(() => reportPreviewNavigation(location.href), 0));
+  // Only a changed address is a route change: routers also rewrite the
+  // current entry's state without moving (Vue Router saves the scroll
+  // position on beforeunload), and that must not be reported as a visit to
+  // this page — it would undo a link click the studio is already loading.
+  let documentNavigationUrl = location.href;
+  const reportDocumentNavigation = () => setTimeout(() => {
+    if (sameNavigationUrl(location.href, documentNavigationUrl)) return;
+    documentNavigationUrl = location.href;
+    reportPreviewNavigation(location.href);
+  }, 0);
+  window.navigation?.addEventListener('currententrychange', reportDocumentNavigation);
+  window.addEventListener('popstate', reportDocumentNavigation);
+  window.addEventListener('hashchange', reportDocumentNavigation);
   // Navigation is useful even when the visual inspector itself is off.
   document.addEventListener('click', (event) => {
     if (replayingSteps || !navigationSyncActive || inspectorInteractionActive || document.documentElement.hasAttribute('data-viewport-parade-inspecting') || event.defaultPrevented || event.button !== 0) return;

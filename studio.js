@@ -113,7 +113,7 @@ const CUSTOM_PRESETS = {
 
 const MIN_VIEWPORT_WIDTH = 320;
 const MIN_VIEWPORT_HEIGHT = 320;
-const INSPECTOR_PROTOCOL_VERSION = 14;
+const INSPECTOR_PROTOCOL_VERSION = 15;
 
 const INSPECTOR_FIELDS = {
   size: [['width', 'W', 'text'], ['height', 'H', 'text'], ['minWidth', 'Min width', 'text'], ['maxWidth', 'Max width', 'text'], ['minHeight', 'Min height', 'text'], ['maxHeight', 'Max height', 'text']],
@@ -2628,6 +2628,16 @@ function updateCardDimensions(card, device, width, height, scale) {
   if (heightCallout) heightCallout.textContent = `${height}px height`;
 }
 
+// The page in a preview keeps running until the next one replaces it, and
+// what it reports meanwhile (a router rewriting history on beforeunload) is
+// about a page that is going away. Until the frame loads, it is ignored.
+// A new fragment alone keeps the document and fires no load event.
+function loadPreviewFrame(iframe, url) {
+  const withoutHash = (value) => value.split('#')[0];
+  if (!url.includes('#') || withoutHash(url) !== withoutHash(iframe.src)) iframe.dataset.navigating = 'true';
+  iframe.src = url;
+}
+
 function enableNavigationSync(card) {
   const iframe = card.querySelector('iframe');
   iframe?.contentWindow?.postMessage({
@@ -2778,7 +2788,7 @@ function refreshPreview(card) {
   refreshed.searchParams.set('__viewport_parade_refresh', String(Date.now()));
   setInspectorState(card, false);
   setContrastState(card, false);
-  iframe.src = refreshed.href;
+  loadPreviewFrame(iframe, refreshed.href);
 }
 
 function setInspectorState(card, enabled) {
@@ -3191,9 +3201,10 @@ function createViewportCard(device, width, scale) {
       blockedMessage.querySelector('p').textContent = 'Enable “Allow access to file URLs” in the extension settings and reload Studio.';
     }
   } else {
-    iframe.src = targetUrl;
+    loadPreviewFrame(iframe, targetUrl);
     waitForLocalPreview(card);
     iframe.addEventListener('load', () => {
+      delete iframe.dataset.navigating;
       enableNavigationSync(card);
     });
     iframe.addEventListener('pointerenter', () => {
@@ -3293,7 +3304,7 @@ function render() {
       const iframe = card.querySelector('iframe');
       setInspectorState(card, false);
       setContrastState(card, false);
-      iframe.src = targetUrl;
+      loadPreviewFrame(iframe, targetUrl);
       waitForLocalPreview(card);
       iframe.addEventListener('load', () => {
         notice.hidden = true;
@@ -3331,7 +3342,7 @@ window.addEventListener('message', (event) => {
   if (Number(event.data.inspectorProtocolVersion) !== INSPECTOR_PROTOCOL_VERSION && !card.dataset.inspectorProtocolReloaded) {
     card.dataset.inspectorProtocolReloaded = 'true';
     const iframe = card.querySelector('iframe');
-    iframe.src = iframe.src;
+    loadPreviewFrame(iframe, iframe.src);
     return;
   }
   card.dataset.previewReady = 'true';
@@ -3395,8 +3406,8 @@ window.addEventListener('message', (event) => {
 
 window.addEventListener('message', (event) => {
   if (event.data?.source !== 'viewport-parade' || event.data?.type !== 'navigate-preview') return;
-  const isPreview = [...document.querySelectorAll('.viewport-card iframe')].some((iframe) => iframe.contentWindow === event.source);
-  if (isPreview) openPreviewUrl(event.data.url, true);
+  const preview = [...document.querySelectorAll('.viewport-card iframe')].find((iframe) => iframe.contentWindow === event.source);
+  if (preview && !preview.dataset.navigating) openPreviewUrl(event.data.url, true);
 });
 
 window.addEventListener('message', (event) => {
