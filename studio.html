@@ -39,18 +39,20 @@
 
         <div class="toolbar-end">
         <div class="toolbar-utilities">
-          <button class="toolbar-ghost-button theme-toggle tooltip-trigger" id="theme-toggle" type="button" aria-pressed="false" aria-label="Dark theme" data-tooltip="Dark theme">
-            <span class="theme-icon-moon" data-phosphor-icon="moon"></span>
-            <span class="theme-icon-sun" data-phosphor-icon="sun"></span>
-          </button>
-          <button class="toolbar-ghost-button tooltip-trigger" id="help-trigger" type="button" aria-label="Keyboard shortcuts" data-tooltip="Keyboard shortcuts" aria-haspopup="dialog" popovertarget="help-dialog">
-            <span data-phosphor-icon="question"></span>
-          </button>
+          <details class="more-actions studio-menu" id="studio-menu">
+            <summary class="toolbar-ghost-button tooltip-trigger" aria-label="Settings" data-tooltip="Settings"><span data-phosphor-icon="gear-six"></span></summary>
+            <div class="menu more-actions-menu">
+              <button type="button" id="code-toggle" aria-pressed="false" aria-keyshortcuts="E" aria-controls="code-panel">Code view</button>
+              <hr class="menu-divider">
+              <button type="button" id="theme-toggle" aria-pressed="false">Dark theme</button>
+              <button type="button" id="compact-toggle" aria-pressed="false">Compact previews</button>
+            </div>
+          </details>
         </div>
         <div class="zoom-control" role="group" aria-label="Zoom all previews">
-          <button class="zoom-button" type="button" data-zoom="out" aria-label="Zoom out">−</button>
-          <output class="zoom-value" id="zoom-value" aria-live="polite">100%</output>
-          <button class="zoom-button" type="button" data-zoom="in" aria-label="Zoom in">+</button>
+          <button class="zoom-button tooltip-trigger" type="button" data-zoom="out" aria-label="Zoom out" data-tooltip="Zoom out"><span data-phosphor-icon="minus"></span></button>
+          <button class="zoom-value tooltip-trigger" id="zoom-value" type="button" aria-label="Reset zoom to 100%" data-tooltip="Reset to 100%">100%</button>
+          <button class="zoom-button tooltip-trigger" type="button" data-zoom="in" aria-label="Zoom in" data-tooltip="Zoom in"><span data-phosphor-icon="plus"></span></button>
         </div>
         </div>
       </header>
@@ -62,14 +64,10 @@
 
       <section class="workspace" id="preview" aria-label="Selected viewport previews">
         <div class="viewport-grid" id="viewport-grid"></div>
-        <section class="empty-state" id="empty-state" hidden aria-labelledby="empty-title">
-          <div class="empty-morph" aria-hidden="true"><span class="morph-frame"><i class="morph-home"></i></span><i class="morph-stand"></i></div>
-          <h1 id="empty-title">PixelPrism</h1>
-          <p>Enter a website address above to open it in the selected viewports.</p>
-        </section>
       </section>
     </main>
-    <nav class="mode-dock" aria-label="Studio modes">
+    <nav class="mode-dock" aria-label="Studio tools">
+      <div class="mode-dock-group" role="group" aria-label="Tools">
       <button class="mode-dock-button cursor-toggle" id="cursor-toggle" type="button" aria-label="Cursor" title="Cursor (V)" aria-keyshortcuts="V" aria-pressed="true">
         <span data-phosphor-icon="cursor"></span>
       </button>
@@ -80,16 +78,34 @@
         <span data-phosphor-icon="chat-circle-text"></span>
         <span class="comments-count" id="comments-count" hidden aria-hidden="true"></span>
       </button>
-      <button class="mode-dock-button layers-toggle" id="layers-toggle" type="button" aria-label="Layers" title="Layers (L)" aria-keyshortcuts="L" aria-pressed="false" aria-controls="layers-panel">
-        <span data-phosphor-icon="stack"></span>
-      </button>
-      <button class="mode-dock-button code-toggle" id="code-toggle" type="button" aria-label="Code" title="Code (E)" aria-keyshortcuts="E" aria-pressed="false" aria-controls="code-panel">
-        <span data-phosphor-icon="code"></span>
-      </button>
+      </div>
+      <div class="mode-dock-group" role="group" aria-label="Handoff">
+        <button class="mode-dock-button agents-handoff" id="agents-handoff-button" type="button" aria-label="Agents handoff" title="Agents handoff">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C12.6 7.5 16.5 11.4 22 12C16.5 12.6 12.6 16.5 12 22C11.4 16.5 7.5 12.6 2 12C7.5 11.4 11.4 7.5 12 2Z"/></svg>
+        </button>
+        <details class="more-actions mode-dock-menu" id="export-review-menu">
+          <summary class="mode-dock-button" aria-label="Export review" title="Export review">
+            <span data-phosphor-icon="export"></span>
+            <span class="mode-dock-caret" data-phosphor-icon="caret-down"></span>
+            <svg class="mode-dock-progress" viewBox="0 0 50 38" preserveAspectRatio="none" aria-hidden="true"><rect x="1" y="1" width="48" height="36" rx="8" pathLength="100"/></svg>
+          </summary>
+          <div class="menu more-actions-menu" role="menu" aria-label="Export review">
+            <button type="button" role="menuitem" id="review-export-button">Export HTML</button>
+            <button type="button" role="menuitem" id="review-pdf-export-button">Export PDF</button>
+            <!-- The Markdown report is put away for now; downloadChangeReport still builds it. -->
+            <button type="button" role="menuitem" id="change-report-button" hidden>Export MD</button>
+          </div>
+        </details>
+      </div>
+    </nav>
+    <!-- Layers is a panel, not a tool: its button leads the breadcrumbs, which show the selected element's path after it. -->
+    <nav class="breadcrumbs" aria-label="Layers and the selected element's path">
+      <button type="button" class="toolbar-ghost-button breadcrumbs-layers" id="layers-toggle" aria-label="Layers" title="Layers (L)" aria-keyshortcuts="L" aria-pressed="false" aria-controls="layers-panel"><span data-phosphor-icon="stack"></span></button>
+      <div class="breadcrumbs-path" id="breadcrumbs-path" hidden></div>
     </nav>
     <aside class="layers-panel" id="layers-panel" hidden aria-labelledby="layers-title">
       <header class="layers-panel-header">
-        <div><h2 id="layers-title">Layers</h2><p id="layers-viewport" class="layers-viewport">Active preview</p></div>
+        <div class="layers-heading"><h2 id="layers-title">Layers</h2><span id="layers-viewport" class="layers-viewport tooltip-trigger" role="img" hidden></span></div>
         <button type="button" class="layers-panel-close" id="layers-panel-close" aria-label="Close Layers" title="Close Layers"><span data-phosphor-icon="x"></span></button>
       </header>
       <div class="layers-tree" id="layers-tree" role="tree" aria-label="Page layers" aria-busy="false"></div>
@@ -111,7 +127,7 @@
     </aside>
     <aside class="inspector-panel" id="inspector-panel" hidden aria-labelledby="inspector-title">
       <header class="inspector-panel-header">
-        <div class="inspector-panel-heading"><h2 id="inspector-title"></h2><p class="inspector-panel-selector" id="inspector-selector"></p></div>
+        <div class="inspector-panel-heading"><h2 id="inspector-title"></h2><span class="inspector-panel-target" id="inspector-target"><span class="layers-icon" id="inspector-target-icon"></span><span class="inspector-panel-selector" id="inspector-selector"></span></span></div>
         <button type="button" class="comments-menu-toggle inspector-panel-more tooltip-trigger" id="inspector-panel-more" aria-label="Panel options" data-tooltip="Panel options"><span data-phosphor-icon="dots-three"></span></button>
         <button type="button" class="inspector-panel-close" id="inspector-panel-close" aria-label="Close inspector" title="Close inspector"><span data-phosphor-icon="x"></span></button>
       </header>
@@ -119,32 +135,32 @@
     </aside>
     <aside class="comments-panel" id="comments-panel" hidden aria-labelledby="comments-title">
       <header class="comments-panel-header">
-        <div><h2 id="comments-title">Comments</h2><p id="comments-context" hidden></p></div>
+        <div class="comments-panel-heading"><h2 id="comments-title">Comments</h2><p id="comments-context" hidden></p></div>
+        <button type="button" class="comments-menu-toggle inspector-panel-more tooltip-trigger" id="comments-menu-toggle" aria-label="Comment actions" data-tooltip="Comment actions" aria-haspopup="menu" aria-expanded="false" aria-controls="comments-menu"><span data-phosphor-icon="dots-three"></span></button>
+        <div class="menu comment-menu comments-menu" id="comments-menu" role="menu" hidden>
+          <button type="button" role="menuitem" id="comments-import" title="Bring back comments from an exported HTML review">Import review</button>
+          <button type="button" role="menuitem" id="comments-delete-all" class="is-danger">Delete all comments</button>
+        </div>
+        <input type="file" id="comments-import-input" accept=".html,text/html" hidden>
         <button type="button" class="comments-panel-close" id="comments-panel-close" aria-label="Close Comments" title="Close Comments"><span data-phosphor-icon="x"></span></button>
       </header>
-      <form class="comments-form" id="comments-form">
-        <textarea id="comment-input" name="comment" rows="4" maxlength="2000" aria-label="Comment" placeholder="Write a comment or paste an image..."></textarea>
-        <div class="comment-attachments" id="comment-draft-attachments" hidden></div>
-        <div class="comments-form-actions">
-          <button type="button" class="comment-attach tooltip-trigger" id="comment-attach" aria-label="Attach images" data-tooltip="Attach images"><span data-phosphor-icon="paperclip"></span></button>
-          <button type="submit">Add</button>
-        </div>
-        <input type="file" id="comment-attach-input" accept="image/*" multiple hidden>
-      </form>
-      <section class="comments-list-wrap" aria-labelledby="comments-list-title">
-        <div class="comments-list-header">
-          <h3 id="comments-list-title">Pending comments</h3>
-          <button type="button" class="comments-menu-toggle tooltip-trigger" id="comments-menu-toggle" aria-label="Comment actions" data-tooltip="Comment actions" aria-haspopup="menu" aria-expanded="false" aria-controls="comments-menu"><span data-phosphor-icon="dots-three"></span></button>
-          <div class="comment-menu comments-menu" id="comments-menu" role="menu" hidden>
-            <button type="button" role="menuitem" id="comments-import" title="Bring back comments from an exported HTML review">Import review</button>
-            <button type="button" role="menuitem" id="comments-delete-all" class="is-danger">Delete all comments</button>
-          </div>
-          <input type="file" id="comments-import-input" accept=".html,text/html" hidden>
-        </div>
+      <section class="comments-list-wrap" aria-labelledby="comments-title">
         <ol class="comments-list" id="comments-list"></ol>
-        <p class="comments-empty" id="comments-empty">No comments added yet.</p>
+        <p class="comments-empty" id="comments-empty">Click anywhere in a preview to leave a comment.</p>
       </section>
     </aside>
+    <form class="comment-composer" id="comments-form" hidden aria-label="New comment">
+      <span class="comment-composer-pin" aria-hidden="true"></span>
+      <div class="comment-composer-box">
+        <textarea id="comment-input" name="comment" rows="1" maxlength="2000" aria-label="Comment" placeholder="Add a comment"></textarea>
+        <div class="comment-attachments" id="comment-draft-attachments" hidden></div>
+        <div class="comment-composer-actions">
+          <button type="button" class="comment-attach tooltip-trigger" id="comment-attach" aria-label="Attach images" data-tooltip="Attach images"><span data-phosphor-icon="paperclip"></span></button>
+          <button type="submit" class="comment-composer-send" aria-label="Add comment" title="Add comment (Enter)" disabled><span data-phosphor-icon="arrow-up"></span></button>
+        </div>
+      </div>
+      <input type="file" id="comment-attach-input" accept="image/*" multiple hidden>
+    </form>
     <dialog class="image-viewer" id="image-viewer" aria-labelledby="image-viewer-caption">
       <header class="image-viewer-bar">
         <p id="image-viewer-caption"></p>
@@ -156,32 +172,35 @@
         <button type="button" class="image-viewer-nav" id="image-viewer-next" aria-label="Next image" title="Next image (→)"><span data-phosphor-icon="caret-right"></span></button>
       </div>
     </dialog>
-    <div class="handoff-fab" id="handoff-fab" hidden>
-      <button class="handoff-fab-toggle" id="handoff-fab-toggle" type="button" aria-label="Open changes handoff" title="Changes handoff" aria-expanded="false">
-        <span data-phosphor-icon="download"></span>
-      </button>
-      <div class="handoff-fab-menu" id="handoff-fab-menu" hidden>
-        <p class="handoff-fab-section" id="handoff-agent-title">Agent</p>
-        <div class="handoff-fab-group" role="group" aria-labelledby="handoff-agent-title">
-          <button class="handoff-fab-action" id="change-report-button" type="button">Export MD</button>
-          <button class="handoff-fab-action" id="copy-codex-button" type="button">Copy review</button>
-        </div>
-        <hr class="handoff-fab-divider">
-        <p class="handoff-fab-section" id="handoff-review-title">Design review</p>
-        <div class="handoff-fab-group" role="group" aria-labelledby="handoff-review-title">
-          <button class="handoff-fab-action" id="review-pdf-export-button" type="button">Export PDF</button>
-          <button class="handoff-fab-action" id="review-export-button" type="button">Export HTML</button>
-        </div>
-        <hr class="handoff-fab-divider">
-        <button class="handoff-fab-close" id="handoff-fab-close" type="button">Close</button>
+    <div class="help-fab" id="help-fab">
+      <button class="help-fab-toggle" id="help-fab-toggle" type="button" aria-label="Help" title="Help" aria-expanded="false" aria-controls="help-fab-menu"><span data-phosphor-icon="question-mark"></span></button>
+      <div class="menu is-inverse help-fab-menu" id="help-fab-menu" role="menu" aria-label="Help" hidden>
+        <a role="menuitem" id="feedback-link" href="mailto:hello@dmivanov.ru?subject=PixelPrism%20feedback">Submit feedback</a>
+        <a role="menuitem" id="issue-link" href="https://github.com/divulture/PixelPrism/issues/new" target="_blank" rel="noopener">Report an issue</a>
+        <hr class="menu-divider">
+        <button type="button" role="menuitem" id="help-trigger" aria-haspopup="dialog" popovertarget="help-dialog">Keyboard shortcuts</button>
+        <hr class="menu-divider">
+        <button class="help-fab-close" id="help-fab-close" type="button">Close</button>
       </div>
     </div>
     <div class="status sr-only" id="status" role="status" aria-live="polite"></div>
     <output class="toast" id="toast" role="status" aria-live="polite" hidden></output>
+    <!-- Agents handoff with nothing to hand off: a short clip of the steps that make a review (buttonHint in handoff.js). -->
+    <section class="handoff-hint" id="handoff-hint" popover="auto" role="dialog" aria-labelledby="handoff-hint-title" aria-describedby="handoff-hint-text">
+      <video class="handoff-hint-video" src="media/handoff-hint.webm" muted loop playsinline preload="none" aria-hidden="true"></video>
+      <h2 id="handoff-hint-title">Nothing to hand off yet</h2>
+      <p id="handoff-hint-text">Leave a comment or edit the page, then click here to copy a review for your AI agent.</p>
+    </section>
+    <!-- Export review with nothing to export: a clip of exporting a review and opening it. -->
+    <section class="handoff-hint" id="export-hint" popover="auto" role="dialog" aria-labelledby="export-hint-title" aria-describedby="export-hint-text">
+      <video class="handoff-hint-video" src="media/export-hint.webm" muted loop playsinline preload="none" aria-hidden="true"></video>
+      <h2 id="export-hint-title">Nothing to export yet</h2>
+      <p id="export-hint-text">Leave a comment or edit the page, then export an HTML or PDF review to send to the site's developer.</p>
+    </section>
     <template id="viewport-template">
       <article class="viewport-card">
         <header class="viewport-card-header">
-          <div><span class="viewport-name"></span><span class="viewport-size"></span></div>
+          <div class="viewport-label"><span class="viewport-name"></span><span class="viewport-size"><span class="viewport-width"></span><span class="viewport-height"></span></span></div>
           <div class="card-actions">
             <button class="ruler-button tooltip-trigger" type="button" aria-pressed="false" aria-label="Rulers" aria-keyshortcuts="Shift+R" data-tooltip="Rulers (Shift+R)">
               <span data-phosphor-icon="ruler"></span>
@@ -193,11 +212,11 @@
               <span data-phosphor-icon="columns"></span>
             </button>
             <details class="more-actions capture-actions">
-              <summary class="tooltip-trigger" aria-label="Screenshot" data-tooltip="Screenshot"><span data-phosphor-icon="camera"></span></summary>
-              <div class="more-actions-menu">
+              <summary class="icon-button tooltip-trigger" aria-label="Screenshot" data-tooltip="Screenshot"><span data-phosphor-icon="camera"></span></summary>
+              <div class="menu more-actions-menu">
                 <button class="capture-visible-button" type="button">Visible area</button>
                 <button class="capture-element-button" type="button" aria-pressed="false">Element</button>
-                <hr class="more-actions-divider">
+                <hr class="menu-divider">
                 <p class="more-actions-section" aria-hidden="true">Full page</p>
                 <div role="group" aria-label="Full page">
                   <button class="capture-full-button" type="button" data-delay="0">No delay</button>
@@ -210,8 +229,8 @@
               <span data-phosphor-icon="floppy-disk"></span>
             </button>
             <details class="more-actions">
-              <summary class="tooltip-trigger" aria-label="More actions" data-tooltip="More actions"><span data-phosphor-icon="dots-three"></span></summary>
-              <div class="more-actions-menu">
+              <summary class="icon-button tooltip-trigger" aria-label="More actions" data-tooltip="More actions"><span data-phosphor-icon="dots-three"></span></summary>
+              <div class="menu more-actions-menu">
                 <button class="refresh-button" type="button">Refresh page</button>
                 <button class="solo-button" type="button">Switch to View</button>
               </div>
@@ -219,12 +238,14 @@
           </div>
         </header>
         <div class="viewport-frame">
-          <div class="viewport-scale"><iframe title="Page preview" loading="eager"></iframe></div>
-          <section class="embed-blocked" hidden aria-label="Website cannot be shown in the preview">
-            <div class="embed-icon" aria-hidden="true"><span data-phosphor-icon="file-text"></span></div>
-            <h2>Website cannot be shown in the preview</h2>
-            <p>This service blocks page embedding in an iframe. The screen size is not the issue.</p>
-          </section>
+          <div class="viewport-page">
+            <div class="viewport-scale"><iframe title="Page preview" loading="eager"></iframe></div>
+            <section class="embed-blocked" hidden aria-label="Website cannot be shown in the preview">
+              <div class="embed-icon" aria-hidden="true"><span data-phosphor-icon="eye-slash"></span></div>
+              <h2>Website cannot be shown in the preview</h2>
+              <p>This service blocks page embedding in an iframe. The screen size is not the issue.</p>
+            </section>
+          </div>
         </div>
         <div class="resize-edge" role="slider" tabindex="0" aria-label="Resize viewport width" aria-valuemin="320" aria-valuemax="100000">
           <div class="breakpoint-callout"><strong></strong><span></span></div>
@@ -296,24 +317,45 @@
             <div><dt>Inspector</dt><dd><kbd>I</kbd></dd></div>
             <div><dt>Comments</dt><dd><kbd>C</kbd></dd></div>
             <div><dt>Layers</dt><dd><kbd>L</kbd></dd></div>
-            <div><dt>Code</dt><dd><kbd>E</kbd></dd></div>
+            <div><dt>Code view</dt><dd><kbd>E</kbd></dd></div>
           </dl>
           <p class="more-actions-section">Previews</p>
           <dl class="shortcut-list">
-            <div><dt>Rulers in all cards</dt><dd><kbd>Shift</kbd><kbd>R</kbd></dd></div>
-            <div><dt>Layout grid in all cards</dt><dd><kbd>Shift</kbd><kbd>G</kbd></dd></div>
-            <div><dt>Grid overlay in all cards</dt><dd><kbd>Shift</kbd><kbd>C</kbd></dd></div>
+            <div><dt>Rulers in all cards</dt><dd><kbd data-key="shift" title="Shift">⇧</kbd><kbd>R</kbd></dd></div>
+            <div><dt>Layout grid in all cards</dt><dd><kbd data-key="shift" title="Shift">⇧</kbd><kbd>G</kbd></dd></div>
+            <div><dt>Grid overlay in all cards</dt><dd><kbd data-key="shift" title="Shift">⇧</kbd><kbd>C</kbd></dd></div>
           </dl>
           <p class="more-actions-section">Anywhere</p>
           <dl class="shortcut-list">
             <div><dt>Close a menu or cancel picking</dt><dd><kbd>Esc</kbd></dd></div>
-            <div><dt>Save an edited comment</dt><dd><kbd>⌘</kbd><kbd>Enter</kbd></dd></div>
-            <div><dt>Move a marker to the exact element</dt><dd><kbd>Alt</kbd><span>+ drag</span></dd></div>
+            <div><dt>Save an edited comment</dt><dd><kbd data-key="mod" title="Command">⌘</kbd><kbd data-key="enter" title="Enter">↵</kbd></dd></div>
+            <div><dt>Move a marker to the exact element</dt><dd><kbd data-key="alt" title="Option">⌥</kbd><span>drag</span></dd></div>
           </dl>
         </div>
       </div>
     </section>
     <script src="phosphor-icons.js"></script>
-    <script src="studio.js"></script>
+    <!-- Classic scripts sharing one scope, in load order: see tools/check-load-order.js. -->
+    <script src="studio/core.js"></script>
+    <script src="studio/tooltips.js"></script>
+    <script src="studio/changes.js"></script>
+    <script src="studio/storage.js"></script>
+    <script src="studio/attachments.js"></script>
+    <script src="studio/comments.js"></script>
+    <script src="studio/comment-composer.js"></script>
+    <script src="studio/handoff.js"></script>
+    <script src="studio/review.js"></script>
+    <script src="studio/viewports.js"></script>
+    <script src="studio/rulers-grid.js"></script>
+    <script src="studio/code-panel.js"></script>
+    <script src="studio/layers.js"></script>
+    <script src="studio/inspector-config.js"></script>
+    <script src="studio/inspector-controls.js"></script>
+    <script src="studio/inspector-panel.js"></script>
+    <script src="studio/preview-bridge.js"></script>
+    <script src="studio/shortcuts.js"></script>
+    <script src="studio/workspaces.js"></script>
+    <script src="studio/toolbar.js"></script>
+    <script src="studio/main.js"></script>
   </body>
 </html>

@@ -14,6 +14,43 @@ async function openStudioForTab(tab) {
 
 chrome.action.onClicked.addListener(openStudioForTab);
 
+// The Inspector's scripts, in load order. Chrome runs only inspector/boot.js
+// on every page; it asks for these once it knows its frame is a Studio
+// preview. They share one scope, like Studio's: see tools/check-load-order.js.
+const INSPECTOR_SCRIPTS = [
+  'inspector/core.js',
+  'inspector/states.js',
+  'inspector/reconcile.js',
+  'inspector/navigation.js',
+  'inspector/scroll.js',
+  'inspector/code.js',
+  'inspector/views.js',
+  'inspector/mirror.js',
+  'inspector/overlays.js',
+  'inspector/editor.js',
+  'inspector/layers.js',
+  'inspector/picking.js',
+  'inspector/text-edit.js',
+  'inspector/snapshot.js',
+  'inspector/capture.js',
+  'inspector/commands.js',
+  'inspector/comment-markers.js',
+  'inspector/tools.js',
+  'inspector/main.js'
+];
+const studioUrlPrefix = chrome.runtime.getURL('studio.html');
+
+function loadInspector(sender) {
+  // Only into a document of a frame inside a Studio tab, never elsewhere.
+  if (!sender.tab?.url?.startsWith(studioUrlPrefix) || sender.frameId === undefined || sender.frameId === 0) {
+    return Promise.reject(new Error('The Inspector loads only into Studio previews.'));
+  }
+  const target = sender.documentId
+    ? { tabId: sender.tab.id, documentIds: [sender.documentId] }
+    : { tabId: sender.tab.id, frameIds: [sender.frameId] };
+  return chrome.scripting.executeScript({ target, files: INSPECTOR_SCRIPTS, injectImmediately: true });
+}
+
 const contextMenuId = 'open-pixelprism';
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -22,7 +59,8 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
       id: contextMenuId,
-      title: 'Открыть в PixelPrism',
+      // The build names each edition in its manifest: PixelPrism or PixelPrism Pro.
+      title: `Открыть в ${chrome.runtime.getManifest().name}`,
       contexts: ['page']
     }, () => {
       // Reading lastError marks a rare duplicate-id race as handled.
@@ -170,7 +208,7 @@ async function captureViewport({ url, width, height, returnWindowId }) {
 // Shared by review scripts that run inside the captured page. It resolves an
 // element recorded in the studio back to the same node on a fresh load.
 const REVIEW_ELEMENT_HELPERS = `
-    // Mirrors the popup helpers in inspector.js (isPopupLayer, popupLayerFor,
+    // Mirrors the popup helpers in inspector/views.js (isPopupLayer, popupLayerFor,
     // shownPopupLayers): popups are named ones, or floating layers high above
     // the page, or in the top layer.
     const GENERATED_ID = /[:«»]|^(radix-|headlessui-|mui-\\d|react-aria|react-select-\\d|rc[_-]|downshift-\\d|floating-ui-|base-ui-|ember\\d)|[0-9a-f]{8}-[0-9a-f]{4}-/i;
@@ -261,7 +299,7 @@ const REVIEW_ELEMENT_HELPERS = `
       return node;
     };
     // Items of a popup share their markup and a portal moves around the page
-    // between loads, so they are checked by text too (textAgrees in inspector.js).
+    // between loads, so they are checked by text too (textAgrees in inspector/core.js).
     const textAgrees = (element, context) => {
       if (!context || !context.popup || !context.text) return true;
       const text = normalizeText(context.text).replace(/…$/, '');
@@ -327,7 +365,7 @@ const REVIEW_ELEMENT_HELPERS = `
 
 // The element that scrolls the page. Usually the window, but app-like sites
 // often keep the window still and scroll a full-screen container instead,
-// sometimes only at some widths. Mirrors pageScroller() in inspector.js.
+// sometimes only at some widths. Mirrors pageScroller() in inspector/scroll.js.
 const REVIEW_SCROLLER_HELPERS = `
     const pageScroller = () => {
       const root = document.scrollingElement || document.documentElement;
@@ -605,14 +643,14 @@ async function waitForReviewTargets(debuggee, targets, changes = [], timeout = 1
 // Each step gets real input first (Chrome's own mouse, as a person would
 // press), then the press as page events, then the keys that open menus and
 // selects; it counts once the popup is seen open or the switch reads as
-// switched. Mirrors replayViewSteps in inspector.js.
+// switched. Mirrors replayViewSteps in inspector/comment-markers.js.
 async function evaluateReviewValue(debuggee, expression, timeout = 8000) {
   const result = await reviewDebuggerCommand(debuggee, 'Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }, timeout);
   return result?.result?.value;
 }
 
 // Finds the step's control, scrolls it to the middle of the screen and
-// starts watching for the popup a press opens (watchForPopup in inspector.js).
+// starts watching for the popup a press opens (watchForPopup in inspector/views.js).
 function reviewStepLocateExpression(step) {
   return `(async () => {
     const step = ${JSON.stringify({ kind: step.kind, element: step.element, expanded: step.expanded, open: step.open })};
@@ -738,7 +776,7 @@ async function pressReviewControl(debuggee, method, located) {
     return;
   }
   if (method === 'events') {
-    // The press as page events (pressControl in inspector.js), for a control
+    // The press as page events (pressControl in inspector/states.js), for a control
     // that something else covers at its middle.
     await evaluateReviewValue(debuggee, `(() => {
       const control = window.__pixelPrismReviewControl;
@@ -832,6 +870,8 @@ async function replayReviewStep(debuggee, step) {
 async function replayReviewSteps(debuggee, steps) {
   const failed = [];
   let popup = false;
+  // Which steps opened a popup (a modal, a menu), by index.
+  const popupSteps = [];
   if (steps.some((step) => step.kind === 'state' || step.kind === 'hover')) {
     await reviewDebuggerCommand(debuggee, 'DOM.enable');
     await reviewDebuggerCommand(debuggee, 'CSS.enable');
@@ -844,10 +884,50 @@ async function replayReviewSteps(debuggee, steps) {
     }
     const result = await replayReviewStep(debuggee, step).catch(() => ({ ok: false, popup: false }));
     if (!result.ok) failed.push(step.label || 'a hidden view');
-    if (result.popup || step.kind === 'open' || step.kind === 'hover') popup = true;
+    if (result.popup || step.kind === 'open' || step.kind === 'hover') {
+      popup = true;
+      popupSteps.push(steps.indexOf(step));
+    }
   }
   await evaluateReviewValue(debuggee, `(() => { if (window.__pixelPrismPopupWatch) window.__pixelPrismPopupWatch.stop(); return true; })()`).catch(() => {});
-  return { failed, popup };
+  return { failed, popup, popupSteps };
+}
+
+// Elements under a popup's backdrop: something large and fixed (a modal and
+// its mask) lies over the element's middle without holding it. A comment
+// recorded before comments kept only the popups they are in can carry a
+// modal it was never on; Studio captures such elements again without it.
+function coveredReviewTargets(debuggee, targets) {
+  const payload = JSON.stringify(targets.filter(({ target }) => !target?.pin).map(({ id, target }) => ({ id, target })));
+  return evaluateReviewValue(debuggee, `(() => {
+    const targets = ${payload};
+    ${REVIEW_ELEMENT_HELPERS}
+    const viewportArea = window.innerWidth * window.innerHeight;
+    const coveringLayer = (node, element) => {
+      for (let current = node; current && current !== document.body && current !== document.documentElement; current = current.parentElement) {
+        if (current.contains(element)) return null;
+        if (getComputedStyle(current).position !== 'fixed') continue;
+        const box = current.getBoundingClientRect();
+        if (box.width * box.height >= viewportArea / 2) return current;
+      }
+      return null;
+    };
+    return targets.filter(({ target }) => {
+      const element = elementFor(target);
+      if (!element) return false;
+      const rect = element.getBoundingClientRect();
+      if (rect.width < 1 || rect.height < 1) return false;
+      const x = Math.min(Math.max(rect.left + rect.width / 2, 1), window.innerWidth - 1);
+      const y = Math.min(Math.max(rect.top + rect.height / 2, 1), window.innerHeight - 1);
+      if (rect.bottom < 0 || rect.top > window.innerHeight || rect.right < 0 || rect.left > window.innerWidth) return false;
+      for (const node of document.elementsFromPoint(x, y)) {
+        if (node.closest('[data-viewport-parade-overlay]')) continue;
+        if (node === element || element.contains(node) || node.contains(element)) return false;
+        if (coveringLayer(node, element)) return true;
+      }
+      return false;
+    }).map(({ id }) => id);
+  })()`, 6000).then((ids) => (Array.isArray(ids) ? ids : []), () => []);
 }
 
 // A comment left on a state (Hover, Focus, Pressed) is captured with the
@@ -872,7 +952,7 @@ async function forceReviewState(debuggee, step) {
       const element = nodes[0];
       if (!element) return nodes;
       if (step.state === 'focus') {
-        // A tab selects itself on focus (sendStateEvents in inspector.js).
+        // A tab selects itself on focus (sendStateEvents in inspector/states.js).
         if (element.matches('[role="tab"]')) return nodes;
         element.dispatchEvent(new FocusEvent('focus', { composed: true }));
         element.dispatchEvent(new FocusEvent('focusin', { bubbles: true, composed: true }));
@@ -1097,7 +1177,7 @@ async function renderViewSnapshot(debuggee, network, snapshot) {
 }
 
 // A page with comments left on a view it does not load in comes with a copy
-// of that view (pageSnapshot in inspector.js): the copy is rendered instead
+// of that view (pageSnapshot in inspector/snapshot.js): the copy is rendered instead
 // of the page, so nothing has to be clicked open again. Without one, the
 // page is loaded and its recorded steps are replayed.
 async function captureReviewPage({ url, width, height, changes, targets = [], steps = [], snapshot = null, returnWindowId }) {
@@ -1127,6 +1207,12 @@ async function captureReviewPage({ url, width, height, changes, targets = [], st
         if (settled && !settled.rects.some((rect) => rect.found && rect.visible)) replay = await replayReviewSteps(debuggee, viewSteps);
       }
     }
+    // Steps a copy was taken after are not replayed; its popups are the
+    // steps that open one.
+    const popupSteps = fromSnapshot
+      ? viewSteps.map((step, index) => (step.kind === 'open' || step.kind === 'hover' || step.expanded === 'true' ? index : -1)).filter((index) => index >= 0)
+      : replay.popupSteps || [];
+    const covered = popupSteps.length && targets.length ? await coveredReviewTargets(debuggee, targets) : [];
     const identity = await reviewIdentityFor(debuggee, url).catch(() => ({ name: '', logoDataUrl: '' }));
     const changesApplied = await reviewDebuggerCommand(debuggee, 'Runtime.evaluate', {
       expression: reviewPreparationExpression({ changes, keepScroll: replay.popup || fromSnapshot }),
@@ -1192,7 +1278,7 @@ async function captureReviewPage({ url, width, height, changes, targets = [], st
     const unplaced = initial.rects
       .filter((rect) => !planned.has(rect.id))
       .map((rect) => ({ id: rect.id, found: Boolean(rect.found), visible: false }));
-    return { shots, unplaced, identity, failedSteps: replay.failed };
+    return { shots, unplaced, identity, failedSteps: replay.failed, covered, popupSteps };
   });
 }
 
@@ -1349,7 +1435,7 @@ function captureElementBoxExpression(target, keepScroll) {
   })()`;
 }
 
-// The copy of a view a comment was left in (pageSnapshot in inspector.js):
+// The copy of a view a comment was left in (pageSnapshot in inspector/snapshot.js):
 // its shadow roots are all written open, and marks (data-pixelprism-*) say
 // what to restore.
 const SNAPSHOT_HELPERS = `
@@ -1488,6 +1574,18 @@ async function captureElement({ target, steps = [], ...options }) {
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // The demo page is the extension's own: Chrome does not inject into it, so
+  // it loads the Inspector's scripts itself, in this order.
+  if (message?.type === 'inspector-scripts') {
+    sendResponse({ ok: true, scripts: INSPECTOR_SCRIPTS });
+    return false;
+  }
+  if (message?.type === 'load-inspector') {
+    loadInspector(sender)
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
   if (message?.type === 'file-scheme-access') {
     chrome.extension.isAllowedFileSchemeAccess()
       .then((allowed) => sendResponse({ ok: true, allowed }))
