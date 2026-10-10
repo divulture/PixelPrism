@@ -9,8 +9,17 @@
     "48": "icons/pulse-48.png",
     "128": "icons/pulse-128.png"
   },
-  "permissions": ["tabs", "downloads", "activeTab", "debugger", "contextMenus"],
-  "host_permissions": ["<all_urls>"],
+  "permissions": [
+    "tabs",
+    "downloads",
+    "activeTab",
+    "debugger",
+    "contextMenus",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "action": {
     "default_title": "Open PixelPrism",
     "default_icon": {
@@ -22,10 +31,18 @@
     "service_worker": "background.js",
     "type": "module"
   },
-  "content_scripts": [{
-    "matches": ["http://*/*", "https://*/*", "file:///*"],
-    "js": ["inspector.js"],
-    "all_frames": true,
-    "run_at": "document_idle"
-  }]
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*",
+        "file:///*"
+      ],
+      "js": [
+        "inspector/boot.js"
+      ],
+      "all_frames": true,
+      "run_at": "document_idle"
+    }
+  ]
 }
