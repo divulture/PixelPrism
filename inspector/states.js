@@ -1,4 +1,4 @@
-// Showing an element in a state (Hover, Focus, Pressed), and pressing controls the way a pointer does.
+// Showing an element in a state (Hover, Focus, Pressed), its ::before and ::after, and pressing controls the way a pointer does.
 
 // Interaction states shown on demand: the Inspector's Hover, Focus and
 // Pressed. The page's own :hover, :focus and :active rules are copied into
@@ -111,10 +111,8 @@ const stateSheetText = (sheets) => sheets.map(({ rules, href, media }) => {
   const text = absoluteCssUrls([...rules].map((rule) => stateRuleText(rule, href)).join(''), href);
   return text && media && media !== 'all' ? `@media ${media}{${text}}` : text;
 }).join('\n');
-// Which states the page's CSS styles on this element, even a plain card
-// with a :hover rule. Nested rules are read against their parents.
-const stateRulesFor = (element, sheets) => {
-  const found = new Set();
+// Every style rule's selector parts, nested ones read against their parents.
+const eachStyleSelector = (sheets, callback) => {
   const visit = (rules, parentSelector) => {
     [...rules].forEach((rule) => {
       if (rule.styleSheet) {
@@ -127,23 +125,122 @@ const stateRulesFor = (element, sheets) => {
         selector = parentSelector
           ? splitSelectorList(rule.selectorText).map((part) => (part.includes('&') ? part.replaceAll('&', `:is(${parentSelector})`) : `:is(${parentSelector}) ${part}`)).join(',')
           : rule.selectorText;
-        splitSelectorList(selector).forEach((part) => {
-          const names = [...part.matchAll(new RegExp(statePseudoPattern.source, 'gi'))].map((match) => match[1].toLowerCase());
-          if (!names.length || !forcedStateSelector(part)) return;
-          const plain = part.replace(statePseudoPattern, '');
-          try {
-            if (!element.matches(plain.trim() || '*')) return;
-          } catch {
-            return;
-          }
-          names.forEach((name) => found.add(name.startsWith('focus') ? 'focus' : name));
-        });
+        splitSelectorList(selector).forEach((part) => callback(part, rule));
       }
       if (rule.cssRules?.length && rule.type !== 7) visit(rule.cssRules, selector);
     });
   };
   sheets.forEach(({ rules }) => visit(rules, ''));
+};
+// The element's ::before and ::after, which the Inspector edits as their
+// own rules (".link::after", ".link:hover::after"). The legacy one-colon
+// form (:before) counts too.
+const PSEUDO_SUFFIX = { before: '::before', after: '::after' };
+const pseudoElementPattern = /::?(before|after)$/i;
+// "a.link:hover::after" → { base: 'a.link:hover', pseudo: 'after' }. A bare
+// "::after" or ".card > ::after" stands for any element there.
+const splitPseudoElement = (selector) => {
+  const text = String(selector).trim();
+  const match = pseudoElementPattern.exec(text);
+  if (!match || text[match.index - 1] === '\\') return { base: text, pseudo: '' };
+  const base = text.slice(0, match.index);
+  return { base: !base.trim() || /[\s>+~]$/.test(base) ? `${base}*` : base, pseudo: match[1].toLowerCase() };
+};
+const pseudoOfSelector = (selector) => splitPseudoElement(selector).pseudo;
+// The part of a selector that must be in the state for the state match at
+// index to apply. At the top level it is everything up to the end of the
+// compound (".grid .item:hover" in ".grid .item:hover .icon"), so the host
+// is found with its context. Inside :is() or :where(), as Tailwind v4 writes
+// group-hover (".x:is(:where(.group):hover *)"), it is the compound alone:
+// ":where(.group):hover".
+const stateHostSelector = (selector, index) => {
+  const starts = [0];
+  let quote = '';
+  for (let at = 0; at < index; at += 1) {
+    const char = selector[at];
+    if (char === '\\') at += 1;
+    else if (quote) { if (char === quote) quote = ''; }
+    else if (char === '"' || char === "'") quote = char;
+    else if (char === '(' || char === '[') starts.push(at + 1);
+    else if (char === ')' || char === ']') starts.pop();
+    else if (/[\s>+~,]/.test(char)) starts[starts.length - 1] = at + 1;
+  }
+  let end = index;
+  let depth = 0;
+  for (; end < selector.length; end += 1) {
+    const char = selector[end];
+    if (char === '\\') end += 1;
+    else if (char === '(' || char === '[') depth += 1;
+    else if (char === ')' || char === ']') {
+      if (!depth) break;
+      depth -= 1;
+    } else if (!depth && /[\s>+~,]/.test(char)) break;
+  }
+  return selector.slice(starts.length > 1 ? starts.at(-1) : 0, end);
+};
+const matchesSafely = (element, selector) => {
+  try { return element.matches(selector.trim() || '*'); } catch { return false; }
+};
+// Which states the page's CSS styles on this element: a plain card with a
+// :hover rule, a link whose :hover only moves its ::after, and an element
+// whose hover, on it or on an ancestor, changes what is inside it
+// (".palette-item:hover .tile-help" for the tile holding the help icon,
+// Tailwind's group-hover for the card holding the text).
+// Focus on an ancestor is not the element's: focusing it focuses no parent.
+// A state found once is not looked for again, and each selector is matched
+// once: utility CSS repeats the same hover context in hundreds of rules.
+const stateRulesFor = (element, sheets) => {
+  const found = new Set();
+  const closestCache = new Map();
+  const insideCache = new Map();
+  const cached = (cache, selector, read) => {
+    if (!cache.has(selector)) {
+      let result = false;
+      try { result = read(selector.trim() || '*'); } catch { /* A selector this browser can't match. */ }
+      cache.set(selector, result);
+    }
+    return cache.get(selector);
+  };
+  eachStyleSelector(sheets, (selector) => {
+    if (found.has('hover') && found.has('focus') && found.has('active')) return;
+    const part = splitPseudoElement(selector).base.trim();
+    const states = [...part.matchAll(new RegExp(statePseudoPattern.source, 'gi'))]
+      .map((match) => ({ match, name: match[1].toLowerCase() }))
+      .map((item) => ({ ...item, state: item.name.startsWith('focus') ? 'focus' : item.name }))
+      .filter(({ state }) => !found.has(state));
+    if (!states.length || !forcedStateSelector(part)) return;
+    const plain = part.replace(statePseudoPattern, '');
+    const own = matchesSafely(element, plain);
+    states.forEach(({ match, name, state }) => {
+      if (own) {
+        found.add(state);
+        return;
+      }
+      if (name === 'focus' || name === 'focus-visible') return;
+      const host = stateHostSelector(part, match.index).replace(statePseudoPattern, '');
+      if (!cached(closestCache, host, (text) => Boolean(element.closest(text)))) return;
+      if (cached(insideCache, plain, (text) => Boolean(element.querySelector(text)))) found.add(state);
+    });
+  });
   return found;
+};
+// Replaced and empty elements draw no ::before or ::after.
+const NO_PSEUDO_SELECTOR = 'img, input, select, textarea, video, audio, iframe, canvas, embed, object, br, wbr, svg';
+const hasPseudoContent = (value) => Boolean(value) && !/^(none|normal)$/i.test(String(value).trim());
+// The pseudo-elements the element has now, and the ones a rule gives
+// content in a state (".link:hover::after { content: '' }"). Resets such as
+// "*::before { box-sizing: border-box }" set no content and make none.
+const pseudosFor = (element, sheets) => {
+  if (element.matches(NO_PSEUDO_SELECTOR) || element.closest('svg')) return [];
+  const found = new Set(Object.keys(PSEUDO_SUFFIX).filter((pseudo) => hasPseudoContent(getComputedStyle(element, PSEUDO_SUFFIX[pseudo]).content)));
+  eachStyleSelector(sheets, (selector, rule) => {
+    const { base, pseudo } = splitPseudoElement(selector);
+    if (!pseudo || found.has(pseudo) || !hasPseudoContent(rule.style?.getPropertyValue('content'))) return;
+    try {
+      if (element.matches(base.replace(statePseudoPattern, '').trim() || '*')) found.add(pseudo);
+    } catch { /* A selector this browser can't match. */ }
+  });
+  return Object.keys(PSEUDO_SUFFIX).filter((pseudo) => found.has(pseudo));
 };
 const FOCUSABLE_SELECTOR = 'a[href], button, input:not([type="hidden"]), select, textarea, summary, [tabindex], [contenteditable=""], [contenteditable="true"]';
 const INTERACTIVE_SELECTOR = `${FOCUSABLE_SELECTOR}, label, [role="button"], [role="link"], [role="tab"], [role="menuitem"], [role="option"], [role="checkbox"], [role="radio"], [role="switch"]`;

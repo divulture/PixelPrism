@@ -1,7 +1,13 @@
 // Shared state, Studio elements, viewport presets, the address bar and small helpers.
 
-// The shared analytics script supplies the sender after feature scripts load.
+// Usage analytics is paused until it can be collected in line with 152-FZ
+// (Product/ANALYTICS.md). Feature scripts keep their calls to this inert hook
+// so the sender can come back as one file; what an earlier version stored
+// about analytics in this browser is cleared.
 let trackProductEvent = () => {};
+try {
+  Object.keys(localStorage).filter((key) => key.startsWith('pixelprism-analytics-')).forEach((key) => localStorage.removeItem(key));
+} catch { /* Storage is blocked: there is nothing to clear. */ }
 
 // The stock presets. DEVICES holds the viewports of the workspace in use,
 // starting with these (the Default workspace).
@@ -65,8 +71,6 @@ const layersEmpty = document.querySelector('#layers-empty');
 const layersViewport = document.querySelector('#layers-viewport');
 const commentsToggle = document.querySelector('#comments-toggle');
 const commentsPanel = document.querySelector('#comments-panel');
-// Usage analytics shares the left side with Layers and Comments.
-const analyticsPanel = document.querySelector('#analytics-panel');
 const commentsPanelClose = document.querySelector('#comments-panel-close');
 const commentsForm = document.querySelector('#comments-form');
 const commentInput = document.querySelector('#comment-input');
@@ -252,12 +256,16 @@ function viewportLabel(item, { workspace = true } = {}) {
 
 const MIN_VIEWPORT_WIDTH = 320;
 const MIN_VIEWPORT_HEIGHT = 320;
-const INSPECTOR_PROTOCOL_VERSION = 65;
+const INSPECTOR_PROTOCOL_VERSION = 81;
 
 // The Inspector's states.
 const INSPECTOR_STATE_LABELS = { default: 'Default', hover: 'Hover', focus: 'Focus', active: 'Pressed' };
 // The rule an edit made in each state goes to, as the page script writes it.
 const INSPECTOR_STATE_SUFFIXES = { hover: ':hover', focus: ':focus-visible', active: ':active' };
+// The element's pseudo-elements, and the part they add to an edit's rule
+// after its state (".link:hover::after").
+const INSPECTOR_PSEUDO_LABELS = { '': 'Element', before: '::before', after: '::after' };
+const INSPECTOR_PSEUDO_SUFFIXES = { before: '::before', after: '::after' };
 
 urlInput.value = isDemoUrl(targetUrl) ? '' : targetUrl;
 
@@ -297,8 +305,11 @@ function cssColorToHex(value) {
 
 function googleFavicon(url) {
   try {
-    if (new URL(url).protocol === 'file:') return '';
-    return `https://www.google.com/s2/favicons?sz=32&domain_url=${encodeURIComponent(new URL(url).origin)}`;
+    const { protocol, hostname, origin } = new URL(url);
+    // Local projects have no public favicon; the service returns a generic globe.
+    if (protocol === 'file:' || ['localhost', '[::1]', '0.0.0.0'].includes(hostname)
+      || /^127\./.test(hostname) || hostname.endsWith('.localhost') || hostname.endsWith('.local')) return '';
+    return `https://www.google.com/s2/favicons?sz=32&domain_url=${encodeURIComponent(origin)}`;
   } catch {
     return '';
   }
@@ -311,7 +322,9 @@ function setFavicon(url) {
   addressDisplay.hidden = !hasUrl;
   urlInput.hidden = hasUrl;
   if (hasUrl) addressDisplay.textContent = displayAddress(targetUrl);
-  faviconCandidates = hasUrl ? [url, fallbackFavicon(targetUrl), googleFavicon(targetUrl)].filter(Boolean) : [];
+  // The logo is the last resort, by a path beside studio.html, so it also
+  // works where Studio runs without the extension's runtime.
+  faviconCandidates = hasUrl ? [url, fallbackFavicon(targetUrl), googleFavicon(targetUrl), 'icons/pulse-brand.png'].filter(Boolean) : [];
   const src = faviconCandidates.shift();
   if (src) {
     favicon.src = src;
@@ -325,7 +338,8 @@ function setFavicon(url) {
 function displayAddress(url) {
   try {
     const parsed = new URL(url);
-    if (parsed.protocol === 'file:') return decodeURIComponent(parsed.pathname);
+    // Keep the document name visible even when its parent path is long.
+    if (parsed.protocol === 'file:') return decodeURIComponent(parsed.pathname.split('/').filter(Boolean).slice(-2).join('/')) || '/';
     return parsed.hostname;
   } catch {
     return url.replace(/^https?:\/\//i, '').replace(/\/$/, '');
@@ -405,7 +419,7 @@ function waitForLocalPreview(card) {
     showPreviewError(
       card,
       'Local page did not open',
-      'Reload the extension at chrome://extensions and enable “Allow access to file URLs.” Then open the page again.'
+      'Reload the extension at chrome://extensions and enable “Allow access to file URLs.” Then open the page again'
     );
     showFileAccessNotice();
   }, 2200);
@@ -428,7 +442,7 @@ function openPreviewUrl(value, confirmExternal = false) {
   const nextUrl = normalizeUrl(value);
   if (!nextUrl) return;
   const external = targetUrl && targetUrl !== nextUrl && new URL(nextUrl).origin !== new URL(targetUrl).origin;
-  if (confirmExternal && external && !window.confirm(`Open ${displayAddress(nextUrl)} in every viewport?\n\nLocal inspector changes will be reset.`)) return;
+  if (confirmExternal && external && !window.confirm(`Open ${displayAddress(nextUrl)} in every viewport?\n\nLocal inspector changes will be reset`)) return;
   if (targetUrl !== nextUrl) localFileHandle = undefined;
   targetUrl = nextUrl;
   restoreComments();

@@ -13,6 +13,15 @@ function agentComments() {
     }));
 }
 
+// Where the report says the old value came from, when not from a
+// declaration of the property itself.
+function changeSourceNote(change) {
+  const { htmlAttribute, sourceHint } = change;
+  if (htmlAttribute) return ` (set by the HTML attribute ${htmlAttribute.name}="${htmlAttribute.value}"; no CSS declares it)`;
+  if (sourceHint?.property) return ` (declared as \`${escapeInlineCode(sourceHint.property)}\`${sourceHint.selector ? ` in \`${escapeInlineCode(sourceHint.selector)}\`` : ''})`;
+  return change.newDeclaration ? ' (no declaration in the project CSS yet)' : '';
+}
+
 function formatChangeReport() {
   const notes = agentComments();
   const createdAt = new Intl.DateTimeFormat('en-US', {
@@ -52,15 +61,16 @@ function formatChangeReport() {
         const wrap = properties[0]?.wrapText;
         lines.push('', wrap
           ? `- text “${wrap.text}” in \`${escapeInlineCode(wrap.parent || '')}\`: wrap it in a span and style the span`
-          : `- \`${escapeInlineCode(selector)}\`${changeState(properties[0]) ? ` · ${INSPECTOR_STATE_LABELS[changeState(properties[0])]}` : ''}`);
+          : `- \`${escapeInlineCode(selector)}\`${[INSPECTOR_STATE_LABELS[changeState(properties[0])], INSPECTOR_PSEUDO_SUFFIXES[changePseudo(properties[0])]].filter(Boolean).map((label) => ` · ${label}`).join('')}`);
         properties.forEach((change) => {
           const from = change.from || 'removed';
+          const altFrom = change.fromMissing ? 'none' : `“${change.from}”`;
           const to = change.to || 'removed';
           lines.push(change.property === 'text'
             ? `  - text: “${change.from}” → “${change.to}” (edit the text in the source, not CSS)`
             : change.property === 'alt'
-              ? `  - alt: “${change.from}” → “${change.to}” (set the image's alt attribute in the source, not CSS)`
-              : `  - \`${escapeInlineCode(change.property)}\`: \`${escapeInlineCode(from)}\` → \`${escapeInlineCode(to)}\`${change.newDeclaration ? ' (new declaration: not in the project CSS yet)' : ''}`);
+              ? `  - alt: ${altFrom} → “${change.to}” (set the image's alt attribute in the source, not CSS)`
+              : `  - \`${escapeInlineCode(change.property)}\`: \`${escapeInlineCode(from)}\` → \`${escapeInlineCode(to)}\`${changeSourceNote(change)}`);
         });
       });
     });
@@ -84,8 +94,8 @@ function reportFilename() {
 }
 
 const CODEX_INSTRUCTION = [
-  'Apply the visual changes from PixelPrism to the current source repository. PixelPrism values are visual targets, not instructions to hardcode pixels, colors, or font sizes. For every changed property: (1) locate the rendered element using route, DOM context, text, attributes, selector, surrounding markup, and parent context; (2) trace the current rendered value to its declaration and abstraction chain before editing: CSS custom property, design token/theme, parent/theme variable scope, Tailwind utility/config, preprocessor variable, mixin/helper, component prop, variant/state, shared component style, then local CSS/inline style only when truly local; (3) determine whether intent is global, component, variant, instance, or viewport/breakpoint, including responsive utilities, media/container queries, and responsive props; (4) reuse an existing appropriate token, utility, prop, variant, or scoped variable. Never replace an existing CSS variable, design token, theme value, component prop, Tailwind utility, or shared abstraction with a hardcoded value without evidence it is local. Before changing a token, inspect its usages: change it only for demonstrated global intent; otherwise use the narrowest existing abstraction. Do not create a token for a one-off unless it is semantically reusable and consistent with project conventions. sourceHint is optional browser evidence, not authoritative; verify it in source. A group with state (hover, focus or active) applies only while the element is in that state: put its changes in the element’s state styles (its :hover, :focus-visible or :active rule, a hover:/focus:/active: utility, or the component’s state variant), never in the default styles; ruleSelector is the rule PixelPrism previewed them in. A change with newDeclaration: true has no declaration in the project CSS for this element yet: add one in the narrowest place that styles this element (its component, class, or utility), instead of searching for an existing rule to edit; its before value is only the browser default. An element with wrapText does not exist in the source: it is text that sits directly inside the element at wrapText.parentSelector, beside other children. Wrap exactly that text (wrapText.text) in a span there, give it a class that fits the project’s naming, and apply the changes to that span; the selector PixelPrism used for it is temporary. Preserve the project’s styling architecture (Tailwind, CSS Modules, SCSS, styled-components, CSS variables, themes, or design system) and make the smallest source-level change. Apply only final beforeComputed/afterComputed values. Do not add generated CSS overrides, framework adapters, MCP, AST infrastructure, or unrelated refactors; report genuinely ambiguous matches rather than guessing.',
-  'A change with property text replaces the element’s visible text: change the text where the source defines it (markup, component, content or translation file), not with CSS; before is the old text. A change with property alt sets an image’s alt attribute: change it where the source defines it (markup, component prop, content or translation file); before is the old alt text, empty when the image had none; an empty after marks the image as decorative (alt="").',
+  'Apply the visual changes from PixelPrism to the current source repository. PixelPrism values are visual targets, not instructions to hardcode pixels, colors, or font sizes. For every changed property: (1) locate the rendered element using route, DOM context, text, attributes, selector, surrounding markup, and parent context; (2) trace the current rendered value to its declaration and abstraction chain before editing: CSS custom property, design token/theme, parent/theme variable scope, Tailwind utility/config, preprocessor variable, mixin/helper, component prop, variant/state, shared component style, then local CSS/inline style only when truly local; (3) determine whether intent is global, component, variant, instance, or viewport/breakpoint, including responsive utilities, media/container queries, and responsive props; (4) reuse an existing appropriate token, utility, prop, variant, or scoped variable. Never replace an existing CSS variable, design token, theme value, component prop, Tailwind utility, or shared abstraction with a hardcoded value without evidence it is local. Before changing a token, inspect its usages: change it only for demonstrated global intent; otherwise use the narrowest existing abstraction. Do not create a token for a one-off unless it is semantically reusable and consistent with project conventions. sourceHint is optional browser evidence, not authoritative; verify it in source. A group with state (hover, focus or active) applies only while the element is in that state: put its changes in the element’s state styles (its :hover, :focus-visible or :active rule, a hover:/focus:/active: utility, or the component’s state variant), never in the default styles; ruleSelector is the rule PixelPrism previewed them in. A group with pseudoElement (::before or ::after) styles that pseudo-element of the element, not the element itself: put its changes in the element’s ::before or ::after styles (its ::before or ::after rule, a before:/after: utility, or the component’s pseudo-element style), after the state when the group has one too (.link:hover::after, hover:after:), never on the element; ruleSelector is the rule PixelPrism previewed them in. A sourceHint with property names the property that declares the value under another name: a size declared by its logical name (inline-size for width, min-block-size for min-height in horizontal writing); change that declaration and keep its logical name, instead of adding the physical property beside it. A change with newDeclaration: true has no declaration of that property, or of its logical name, for this element in the project CSS: add one in the narrowest place that styles the element (its component, class, or utility) instead of searching for a rule to edit; its before value is the browser default, or the HTML attribute in htmlAttribute. htmlAttribute { name, value } means the size came from that HTML attribute of the element (width or height of an img, video, canvas, svg or iframe) and no CSS sets it: change the attribute where the source sets it (markup or component prop), or add the declaration when the project sizes such elements in CSS. An element with wrapText does not exist in the source: it is text that sits directly inside the element at wrapText.parentSelector, beside other children. Wrap exactly that text (wrapText.text) in a span there, give it a class that fits the project’s naming, and apply the changes to that span; the selector PixelPrism used for it is temporary. Preserve the project’s styling architecture (Tailwind, CSS Modules, SCSS, styled-components, CSS variables, themes, or design system) and make the smallest source-level change. Apply only final beforeComputed/afterComputed values. Do not add generated CSS overrides, framework adapters, MCP, AST infrastructure, or unrelated refactors; report genuinely ambiguous matches rather than guessing.',
+  'A change with property text replaces the element’s visible text: change the text where the source defines it (markup, component, content or translation file), not with CSS; before is the old text. A change with property alt sets an image’s alt attribute: change it where the source defines it (markup, component prop, content or translation file); before is the old alt text; beforeMissing: true means the image had no alt attribute; an empty after marks the image as decorative (alt="").',
 ].join(' ');
 
 function codexChangeSet() {
@@ -93,8 +103,10 @@ function codexChangeSet() {
   activeChanges().forEach((change) => {
     const element = change.element || {};
     const state = changeState(change);
-    // An element's edits in the default state and in Hover are separate groups.
-    const key = [change.url, change.route, change.viewport.width, change.viewport.height, element.domPath || change.selector, state || ''].join('\u0000');
+    const pseudo = changePseudo(change);
+    // An element's edits in the default state, in Hover and on its ::after
+    // are separate groups.
+    const key = [change.url, change.route, change.viewport.width, change.viewport.height, element.domPath || change.selector, state || '', pseudo || ''].join('\u0000');
     let group = groups.get(key);
     if (!group) {
       const { parent, ...elementDetails } = element;
@@ -113,7 +125,9 @@ function codexChangeSet() {
           htmlSnippet: elementDetails.htmlSnippet || ''
         },
         parent: parent || null,
-        ...(state ? { state, ruleSelector: change.selector } : {}),
+        ...(state ? { state } : {}),
+        ...(pseudo ? { pseudoElement: INSPECTOR_PSEUDO_SUFFIXES[pseudo] } : {}),
+        ...(state || pseudo ? { ruleSelector: change.selector } : {}),
         ...(change.wrapText ? { wrapText: { text: change.wrapText.text, parentSelector: change.wrapText.parent, parentDomPath: change.wrapText.parentDomPath } } : {}),
         changes: []
       };
@@ -128,7 +142,9 @@ function codexChangeSet() {
       beforeComputed: change.from,
       afterComputed: change.to,
       ...(change.sourceHint ? { sourceHint: change.sourceHint } : {}),
-      ...(change.newDeclaration ? { newDeclaration: true } : {})
+      ...(change.newDeclaration ? { newDeclaration: true } : {}),
+      ...(change.htmlAttribute ? { htmlAttribute: change.htmlAttribute } : {}),
+      ...(change.fromMissing ? { beforeMissing: true } : {})
     });
   });
   groups.forEach((group) => { group.changes = collapseShorthandChanges(group.changes); });
@@ -233,18 +249,38 @@ function buttonHint(hint, button) {
 const toggleHandoffHint = buttonHint(document.querySelector('#handoff-hint'), agentsHandoffButton);
 const toggleExportHint = buttonHint(document.querySelector('#export-hint'), exportReviewMenu.querySelector('summary'));
 
+function analyticsHandoffElementCount() {
+  return Math.min(10000, activeChanges().length + siteComments().length);
+}
+
+// Restarts the copied animation on every copy, even on quick repeated clicks.
+function playHandoffCopied() {
+  agentsHandoffButton.classList.remove('is-copied');
+  void agentsHandoffButton.offsetWidth;
+  agentsHandoffButton.classList.add('is-copied');
+}
+
+agentsHandoffButton.addEventListener('animationend', event => {
+  if (event.target === agentsHandoffButton) agentsHandoffButton.classList.remove('is-copied');
+});
+
 async function copyForCodex() {
   if (!hasAgentHandoff()) {
     // Image-only comments explain themselves in the Comments panel.
     toggleHandoffHint();
     return;
   }
+  trackProductEvent('operation_attempted', { operation: 'ai_context_export', feature_id: 'ai_handoff' });
   const payload = JSON.stringify(codexHandoff(), null, 2);
   try {
     await navigator.clipboard.writeText(payload);
     trackProductEvent('handoff_copied');
+    trackProductEvent('ai_context_exported', {
+      export_method: 'copy', context_type: 'agent_handoff', element_count: analyticsHandoffElementCount()
+    });
     // Copying is half the job: say where the review goes next.
-    notify('Review copied. Paste it into your AI agent (Claude Code, Codex, Cursor) to apply the changes.', 'success', agentsHandoffButton);
+    playHandoffCopied();
+    notify('Review copied. Paste it into your AI agent (Claude Code, Codex, Cursor) to apply the changes', 'success', agentsHandoffButton);
   } catch {
     const area = document.createElement('textarea');
     area.value = payload;
@@ -256,28 +292,44 @@ async function copyForCodex() {
     area.remove();
     if (copied) {
       trackProductEvent('handoff_copied');
-      notify('Review copied. Paste it into your AI agent (Claude Code, Codex, Cursor) to apply the changes.', 'success', agentsHandoffButton);
+      trackProductEvent('ai_context_exported', {
+        export_method: 'copy', context_type: 'agent_handoff', element_count: analyticsHandoffElementCount()
+      });
+      playHandoffCopied();
+      notify('Review copied. Paste it into your AI agent (Claude Code, Codex, Cursor) to apply the changes', 'success', agentsHandoffButton);
     }
-    else notify('Unable to copy the review.', 'error', agentsHandoffButton);
+    else {
+      trackProductEvent('operation_failed', {
+        operation: 'ai_context_export', feature_id: 'ai_handoff', error_code: 'clipboard_unavailable'
+      });
+      notify('Unable to copy the review', 'error', agentsHandoffButton);
+    }
   }
 }
 
 async function downloadChangeReport() {
   if (!activeChanges().length) return;
   if (!window.chrome?.runtime?.sendMessage) {
-    notify('Downloads are available after the extension is loaded in Chrome.', 'error');
+    notify('Downloads are available after the extension is loaded in Chrome', 'error');
     return;
   }
   changeReportButton.disabled = true;
+  trackProductEvent('operation_attempted', { operation: 'ai_context_export', feature_id: 'ai_handoff' });
   try {
     const result = await window.chrome.runtime.sendMessage({
       type: 'save-change-report',
       markdown: formatChangeReport(),
       filename: reportFilename()
     });
-    if (!result?.ok) throw new Error(result?.error || 'Unable to save the file.');
-    notify('The Markdown changes report was downloaded.', 'success');
+    if (!result?.ok) throw new Error(result?.error || 'Unable to save the file');
+    trackProductEvent('ai_context_exported', {
+      export_method: 'download', context_type: 'change_report', element_count: analyticsHandoffElementCount()
+    });
+    notify('The Markdown changes report was downloaded', 'success');
   } catch (error) {
+    trackProductEvent('operation_failed', {
+      operation: 'ai_context_export', feature_id: 'ai_handoff', error_code: 'download_unavailable'
+    });
     notify(`Changes report was not saved: ${error.message}`, 'error');
   } finally {
     changeReportButton.disabled = false;

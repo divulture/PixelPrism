@@ -40,7 +40,7 @@
         <div class="toolbar-end">
         <div class="toolbar-utilities">
           <details class="more-actions studio-menu" id="studio-menu">
-            <summary class="toolbar-ghost-button tooltip-trigger" aria-label="Settings" data-tooltip="Settings"><span data-phosphor-icon="gear-six"></span></summary>
+            <summary class="toolbar-ghost-button tooltip-trigger" aria-label="More" data-tooltip="More"><span data-phosphor-icon="dots-three-vertical"></span></summary>
             <div class="menu more-actions-menu">
               <button type="button" id="code-toggle" aria-pressed="false" aria-keyshortcuts="E" aria-controls="code-panel">Code view</button>
               <hr class="menu-divider">
@@ -59,7 +59,7 @@
 
       <section class="notice" id="embed-notice" hidden>
         <span aria-hidden="true">!</span>
-        <p>Some websites block embedding. If the page does not load, open it in a separate tab.</p>
+        <p>Some websites block embedding. If the page does not load, open it in a separate tab</p>
       </section>
 
       <section class="workspace" id="preview" aria-label="Selected viewport previews">
@@ -109,7 +109,7 @@
         <button type="button" class="layers-panel-close" id="layers-panel-close" aria-label="Close Layers" title="Close Layers"><span data-phosphor-icon="x"></span></button>
       </header>
       <div class="layers-tree" id="layers-tree" role="tree" aria-label="Page layers" aria-busy="false"></div>
-      <p class="layers-empty" id="layers-empty" hidden>Select a loaded preview to browse its layers.</p>
+      <p class="layers-empty" id="layers-empty" hidden>Select a loaded preview to browse its layers</p>
     </aside>
     <aside class="code-panel" id="code-panel" hidden aria-labelledby="code-title">
       <div class="code-panel-resize" id="code-panel-resize" role="separator" aria-orientation="vertical" aria-label="Resize the Code panel" tabindex="0"></div>
@@ -131,7 +131,8 @@
         <button type="button" class="comments-menu-toggle inspector-panel-more tooltip-trigger" id="inspector-panel-more" aria-label="Panel options" data-tooltip="Panel options"><span data-phosphor-icon="dots-three"></span></button>
         <button type="button" class="inspector-panel-close" id="inspector-panel-close" aria-label="Close inspector" title="Close inspector"><span data-phosphor-icon="x"></span></button>
       </header>
-      <form class="inspector-panel-fields" id="inspector-panel-fields"></form>
+      <form class="inspector-panel-fields" id="inspector-panel-fields">
+      </form>
     </aside>
     <aside class="comments-panel" id="comments-panel" hidden aria-labelledby="comments-title">
       <header class="comments-panel-header">
@@ -146,20 +147,8 @@
       </header>
       <section class="comments-list-wrap" aria-labelledby="comments-title">
         <ol class="comments-list" id="comments-list"></ol>
-        <p class="comments-empty" id="comments-empty">Click anywhere in a preview to leave a comment.</p>
+        <p class="comments-empty" id="comments-empty">Click anywhere in a preview to leave a comment</p>
       </section>
-    </aside>
-    <aside class="comments-panel analytics-panel" id="analytics-panel" hidden aria-labelledby="analytics-title">
-      <header class="comments-panel-header">
-        <div class="comments-panel-heading"><h2 id="analytics-title">Usage analytics</h2></div>
-        <button type="button" class="comments-panel-close" id="analytics-panel-close" aria-label="Close Usage analytics" title="Close Usage analytics"><span data-phosphor-icon="x"></span></button>
-      </header>
-      <div class="analytics-panel-body">
-        <p>Anonymous usage stats show which tools people rely on, so we know what to improve next.</p>
-        <p>We count the tools you open and how long Studio stays open. Site URLs, page content and comments are never sent.</p>
-        <p class="analytics-panel-state" id="analytics-state"></p>
-        <button type="button" class="add-custom-button" id="analytics-toggle"></button>
-      </div>
     </aside>
     <form class="comment-composer" id="comments-form" hidden aria-label="New comment">
       <span class="comment-composer-pin" aria-hidden="true"></span>
@@ -201,7 +190,6 @@
         <p class="update-check-status" id="update-check-status" role="status" aria-live="polite" hidden></p>
         <hr class="menu-divider">
         <button type="button" role="menuitem" id="help-trigger" aria-haspopup="dialog" popovertarget="help-dialog">Keyboard shortcuts</button>
-        <button type="button" role="menuitem" id="analytics-open" aria-controls="analytics-panel">Usage analytics</button>
         <hr class="menu-divider">
         <button class="help-fab-close" id="help-fab-close" type="button">Close</button>
       </div>
@@ -212,13 +200,13 @@
     <section class="handoff-hint" id="handoff-hint" popover="auto" role="dialog" aria-labelledby="handoff-hint-title" aria-describedby="handoff-hint-text">
       <video class="handoff-hint-video" src="media/handoff-hint.webm" muted loop playsinline preload="none" aria-hidden="true"></video>
       <h2 id="handoff-hint-title">Nothing to hand off yet</h2>
-      <p id="handoff-hint-text">Leave a comment or edit the page, then click here to copy a review for your AI agent.</p>
+      <p id="handoff-hint-text">Leave a comment or edit the page, then click here to copy a review for your AI agent</p>
     </section>
     <!-- Export review with nothing to export: a clip of exporting a review and opening it. -->
     <section class="handoff-hint" id="export-hint" popover="auto" role="dialog" aria-labelledby="export-hint-title" aria-describedby="export-hint-text">
       <video class="handoff-hint-video" src="media/export-hint.webm" muted loop playsinline preload="none" aria-hidden="true"></video>
       <h2 id="export-hint-title">Nothing to export yet</h2>
-      <p id="export-hint-text">Leave a comment or edit the page, then export an HTML or PDF review to send to the site's developer.</p>
+      <p id="export-hint-text">Leave a comment or edit the page, then export an HTML or PDF review to send to the site's developer</p>
     </section>
     <template id="viewport-template">
       <article class="viewport-card">
@@ -266,7 +254,7 @@
             <section class="embed-blocked" hidden aria-label="Website cannot be shown in the preview">
               <div class="embed-icon" aria-hidden="true"><span data-phosphor-icon="eye-slash"></span></div>
               <h2>Website cannot be shown in the preview</h2>
-              <p>This service blocks page embedding in an iframe. The screen size is not the issue.</p>
+              <p>This service blocks page embedding in an iframe. The screen size is not the issue</p>
             </section>
           </div>
         </div>
@@ -380,7 +368,6 @@
     <script src="studio/workspaces.js"></script>
     <script src="studio/toolbar.js"></script>
     <script src="studio/updates.js"></script>
-    <script src="studio/analytics.js"></script>
     <script src="studio/main.js"></script>
   </body>
 </html>

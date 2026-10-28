@@ -111,7 +111,7 @@ async function storeImageFiles(files, room) {
   if (skipped.size) notes.push(`${skipped.size} larger than ${ATTACHMENT_MAX_BYTES / 1024 / 1024} MB`);
   if (skipped.count) notes.push(`${skipped.count} over the limit of ${ATTACHMENTS_PER_COMMENT} per comment`);
   if (skipped.failed) notes.push(`${skipped.failed} could not be stored`);
-  if (notes.length) notify(`Some files were not attached: ${notes.join(', ')}.`, 'error');
+  if (notes.length) notify(`Some files were not attached: ${notes.join(', ')}`, 'error');
   return added;
 }
 
@@ -305,7 +305,7 @@ async function attachToComment(id, files) {
   saveComments();
   renderComments();
   syncCommentMarkers();
-  notify(`${added.length === 1 ? 'Image' : `${added.length} images`} attached to comment ${commentNumber(comment)}.`, 'success');
+  notify(`${added.length === 1 ? 'Image' : `${added.length} images`} attached to comment ${commentNumber(comment)}`, 'success');
 }
 
 function removeCommentAttachment(id, index) {
@@ -318,7 +318,7 @@ function removeCommentAttachment(id, index) {
   saveComments();
   renderComments();
   syncCommentMarkers();
-  notify(`Image removed from comment ${commentNumber(comment)}.`);
+  notify(`Image removed from comment ${commentNumber(comment)}`);
 }
 
 function imageFilesFrom(dataTransfer) {

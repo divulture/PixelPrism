@@ -243,16 +243,16 @@ async function getStudioTab() {
 // Screenshots are taken in a temporary tab at the card's size: the visible
 // area at the top of the page, the full page, or one picked element.
 const CAPTURE_KINDS = {
-  visible: { type: 'capture-viewport', file: 'viewport', saved: 'Visible-area screenshot saved.' },
-  full: { type: 'capture-full-page', file: 'fullpage', saved: 'Full-page screenshot saved.' },
-  element: { type: 'capture-element', file: 'element', saved: 'Element screenshot saved.' }
+  visible: { type: 'capture-viewport', file: 'viewport', saved: 'Visible-area screenshot saved' },
+  full: { type: 'capture-full-page', file: 'fullpage', saved: 'Full-page screenshot saved' },
+  element: { type: 'capture-element', file: 'element', saved: 'Element screenshot saved' }
 };
 
 async function saveCapture(card, kind = 'visible', details = {}) {
   const menu = card.querySelector('.capture-actions');
   const capture = CAPTURE_KINDS[kind];
   if (!window.chrome?.runtime?.sendMessage) {
-    notify('Screenshots are available after the extension is loaded in Chrome.', 'error');
+    notify('Screenshots are available after the extension is loaded in Chrome', 'error');
     return;
   }
   if (menu.getAttribute('aria-busy') === 'true') return;
@@ -271,14 +271,14 @@ async function saveCapture(card, kind = 'visible', details = {}) {
       requestId,
       returnWindowId: studioTab?.windowId
     });
-    if (!response?.ok) throw new Error(response?.error || 'Unable to capture the image.');
+    if (!response?.ok) throw new Error(response?.error || 'Unable to capture the image');
     const result = await window.chrome.runtime.sendMessage({
       type: 'save-capture',
       dataUrl: response.dataUrl,
       filename: `${capture.file}-${card.dataset.device}-${Date.now()}.png`
     });
-    if (!result?.ok) throw new Error(result?.error || 'Unable to save the file.');
-    if (response.truncated) notify(`Full-page screenshot saved: the page is cut at ${response.height} px, the longest image Chrome renders.`, 'success');
+    if (!result?.ok) throw new Error(result?.error || 'Unable to save the file');
+    if (response.truncated) notify(`Full-page screenshot saved: the page is cut at ${response.height} px, the longest image Chrome renders`, 'success');
     else notify(capture.saved, 'success');
   } catch (error) {
     notify(`Screenshot was not saved: ${error.message}`, 'error');
@@ -354,16 +354,16 @@ function setCapturePicking(card) {
   });
   if (!card) return;
   card.querySelector('iframe')?.contentWindow?.postMessage({ source: 'viewport-parade', type: 'toggle-capture-picker', enabled: true }, '*');
-  notify('Click an element in the preview to capture it. Esc cancels.');
+  notify('Click an element in the preview to capture it. Esc cancels');
 }
 
 function startElementCapture(card) {
   if (!hasExtensionRuntime) {
-    notify('Screenshots are available after the extension is loaded in Chrome.', 'error');
+    notify('Screenshots are available after the extension is loaded in Chrome', 'error');
     return;
   }
   if (card.dataset.previewReady !== 'true') {
-    notify('Wait for the preview to load, then pick the element.', 'error');
+    notify('Wait for the preview to load, then pick the element', 'error');
     return;
   }
   setCapturePicking(capturePickCard === card ? null : card);
@@ -478,9 +478,9 @@ function createViewportCard(device, width, scale) {
       if (capturePickCard === card) setCapturePicking(null);
     });
     iframe.addEventListener('pointerenter', () => {
-      // With Layers or Code view open, their preview changes on a click only
-      // (selectViewportCard): passing over another preview must not switch it.
-      if (layersPanel.hidden && codePanel.hidden) setLayersFrame(iframe.contentWindow);
+      // The preview being worked in (Layers, Code view, breadcrumbs, the
+      // Inspector's parent button) changes on a click only, in
+      // selectViewportCard: passing over another preview must not switch it.
       iframe.contentWindow?.postMessage({ source: 'viewport-parade', type: 'inspector-pointer-entered' }, '*');
     });
     iframe.addEventListener('pointerleave', () => {
@@ -667,7 +667,7 @@ function renderCustomSizes() {
 
 function addViewport(name, width, height) {
   if (!Number.isFinite(width) || !Number.isFinite(height) || width < MIN_VIEWPORT_WIDTH || height < MIN_VIEWPORT_HEIGHT) {
-    notify(`Minimum viewport size is ${MIN_VIEWPORT_WIDTH} × ${MIN_VIEWPORT_HEIGHT}px.`, 'error');
+    notify(`Minimum viewport size is ${MIN_VIEWPORT_WIDTH} × ${MIN_VIEWPORT_HEIGHT}px`, 'error');
     return;
   }
   const id = `custom-${++customDeviceCount}`;
@@ -764,7 +764,7 @@ window.addEventListener('pointerup', () => {
   card.querySelector('.breakpoint-callout')?.classList.remove('is-visible');
   card.querySelector('.height-callout')?.classList.remove('is-visible');
   speak(type === 'width'
-    ? `Viewport width: ${width} pixels.`
-    : `Viewport height: ${height} pixels.`);
+    ? `Viewport width: ${width} pixels`
+    : `Viewport height: ${height} pixels`);
 });
 window.addEventListener('resize', () => { if (mode === 'single') render(); });

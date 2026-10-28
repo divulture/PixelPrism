@@ -18,5 +18,8 @@ window.parent.postMessage({
   source: 'viewport-parade',
   type: 'preview-ready',
   url: location.href,
+  framework: detectedPageFramework.framework,
+  detectionConfidence: detectedPageFramework.detectionConfidence,
+  detectionMethod: detectedPageFramework.detectionMethod,
   inspectorProtocolVersion: INSPECTOR_PROTOCOL_VERSION
 }, extensionOrigin);

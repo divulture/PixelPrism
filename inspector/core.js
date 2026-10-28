@@ -1,6 +1,6 @@
 // Talking to Studio, and finding an element again from what Studio stored about it.
 
-const INSPECTOR_PROTOCOL_VERSION = 65;
+const INSPECTOR_PROTOCOL_VERSION = 81;
 const extensionOrigin = new URL(chrome.runtime.getURL('/')).origin;
 const isStudioMessage = (event, type) => (
   event.source === window.parent
@@ -8,6 +8,16 @@ const isStudioMessage = (event, type) => (
   && event.data?.source === 'viewport-parade'
   && event.data?.type === type
 );
+// Only stable DOM signals are used. Modern frameworks without one stay unknown.
+const detectedPageFramework = (() => {
+  if (document.querySelector('[ng-version]')) return { framework: 'angular', detectionConfidence: 'high', detectionMethod: 'angular_attribute' };
+  if (document.querySelector('[data-v-app]')) return { framework: 'vue', detectionConfidence: 'high', detectionMethod: 'vue_attribute' };
+  if (document.querySelector('[data-reactroot], [data-reactid]')) return { framework: 'react', detectionConfidence: 'high', detectionMethod: 'react_attribute' };
+  if ([...document.querySelectorAll('[class*="svelte-"]')].some((element) => [...element.classList].some((name) => /^svelte-[a-z0-9]+$/i.test(name)))) {
+    return { framework: 'svelte', detectionConfidence: 'medium', detectionMethod: 'svelte_class' };
+  }
+  return { framework: 'unknown', detectionConfidence: 'none', detectionMethod: 'none' };
+})();
 const queryOne = (selector) => {
   if (!selector || typeof selector !== 'string') return null;
   try {

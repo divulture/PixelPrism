@@ -43,6 +43,6 @@ const installCapture = () => {
   });
   window.addEventListener('message', (event) => {
     if (!isStudioMessage(event, 'inspector-editor-input')) return;
-    applyEditorValue(event.data.property, String(event.data.value ?? ''), String(event.data.previousValue ?? ''));
+    applyEditorValue(event.data.property, String(event.data.value ?? ''), String(event.data.previousValue ?? ''), event.data.revert === true);
   });
 };

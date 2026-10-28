@@ -12,6 +12,9 @@ const marginStrips = createStrips();
 const paddingStrips = createStrips();
 const spacingEdge = document.createElement('div');
 const gutterLayer = document.createElement('div');
+// While an element is selected its overlays stay on it; the element under
+// the pointer gets only this thin outline, as in Figma.
+const hoverOutline = document.createElement('div');
 const layoutMap = document.createElement('div');
 const label = document.createElement('div');
 // The layout mode greys the page out through one layer that filters what
@@ -21,7 +24,7 @@ const label = document.createElement('div');
 const contrastStyle = document.createElement('style');
 const contrastLayer = document.createElement('div');
 const hideOverlays = () => {
-  [marginOverlay, paddingOverlay, contentOverlay, ...marginStrips, ...paddingStrips, spacingEdge, gutterLayer].forEach((overlay) => { overlay.style.display = 'none'; });
+  [marginOverlay, paddingOverlay, contentOverlay, ...marginStrips, ...paddingStrips, spacingEdge, gutterLayer, hoverOutline].forEach((overlay) => { overlay.style.display = 'none'; });
   gutterLayer.replaceChildren();
   window.parent.postMessage({ source: 'viewport-parade', type: 'inspector-editor-close' }, extensionOrigin);
   selectedElement = undefined;
@@ -34,11 +37,14 @@ const clearSelection = () => {
   unwrapUnusedText();
   releaseForcedState();
   inspectorState = 'default';
+  inspectorPseudo = '';
+  pseudoTarget = undefined;
 };
 const clearHover = () => {
   // Selection is persistent: moving into the Studio Inspector must not make
   // the pinned element lose its visual outline and spacing overlay.
   if (selectedElement) {
+    hoverOutline.style.display = 'none';
     show(selectedElement);
     return;
   }
@@ -168,6 +174,21 @@ const setRect = (overlay, left, top, width, height) => {
   overlay.style.width = `${Math.max(0, Math.round(width))}px`;
   overlay.style.height = `${Math.max(0, Math.round(height))}px`;
 };
+// The outline of what the pointer is over beside the selection: an element
+// or a text node; none on the selection itself.
+const showHoverOutline = (target) => {
+  if (!target || target === selectedElement || (target === selectedTextNode && selectedTextNode) || target.closest?.('[data-viewport-parade-overlay]')) {
+    hoverOutline.style.display = 'none';
+    return;
+  }
+  let box;
+  if (target.nodeType === Node.TEXT_NODE) {
+    const range = document.createRange();
+    range.selectNodeContents(target);
+    box = range.getBoundingClientRect();
+  } else box = target.getBoundingClientRect();
+  setRect(hoverOutline, box.left, box.top, box.width, box.height);
+};
 // Fill the band between an outer and an inner rect ([left, top, right,
 // bottom]) and frame it in the edge colour: each strip frames its sides on
 // the outer boundary, spacingEdge the inner boundary wherever the band is.
@@ -241,7 +262,7 @@ const installOverlays = () => {
   contrastLayer.dataset.viewportParadeContrastLayer = '';
   contrastLayer.style.cssText = 'position:fixed;inset:0;z-index:2147483644;pointer-events:none;-webkit-backdrop-filter:grayscale(1) contrast(.92);backdrop-filter:grayscale(1) contrast(.92);';
   document.documentElement.append(contrastLayer);
-  [marginOverlay, paddingOverlay, contentOverlay, ...marginStrips, ...paddingStrips, spacingEdge, gutterLayer, layoutMap].forEach((overlay) => {
+  [marginOverlay, paddingOverlay, contentOverlay, ...marginStrips, ...paddingStrips, spacingEdge, gutterLayer, layoutMap, hoverOutline].forEach((overlay) => {
     overlay.setAttribute('aria-hidden', 'true');
     overlay.dataset.viewportParadeOverlay = '';
     overlay.style.cssText = 'position:fixed;z-index:2147483646;pointer-events:none;display:none;box-sizing:border-box;';
@@ -253,6 +274,7 @@ const installOverlays = () => {
   [...marginStrips, ...paddingStrips, spacingEdge].forEach((strip) => { strip.style.cssText += 'border:0 solid transparent;'; });
   gutterLayer.style.cssText += 'z-index:2147483647;';
   layoutMap.style.cssText += 'z-index:2147483645;inset:0;';
+  hoverOutline.style.cssText += 'border:1px solid #2563eb;';
   label.style.cssText = 'position:absolute;left:-2px;top:-57px;box-sizing:border-box;width:max-content;max-width:min(390px,calc(100vw - 16px));padding:5px 7px;border-radius:4px;background:#15181f;color:#fff;font:600 11px/1.3 Inter,ui-sans-serif,system-ui,sans-serif;white-space:pre-wrap;box-shadow:0 4px 12px rgba(0,0,0,.25);';
   marginOverlay.append(label);
   new MutationObserver(scheduleLayoutMapSoon).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style', 'hidden', 'open'] });

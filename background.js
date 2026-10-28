@@ -1,3 +1,11 @@
+// Usage analytics is paused (Product/ANALYTICS.md). An install or update
+// clears what an earlier version stored about it.
+async function clearStoredAnalytics() {
+  const stored = await chrome.storage.local.get(null);
+  const keys = Object.keys(stored).filter((key) => key.startsWith('pixelprism-analytics-'));
+  if (keys.length) await chrome.storage.local.remove(keys);
+}
+
 async function openStudioForTab(tab) {
   const url = tab.url && /^(?:https?|file):\/\//.test(tab.url) ? tab.url : '';
   const studioUrl = new URL(chrome.runtime.getURL('studio.html'));
@@ -43,7 +51,7 @@ const studioUrlPrefix = chrome.runtime.getURL('studio.html');
 function loadInspector(sender) {
   // Only into a document of a frame inside a Studio tab, never elsewhere.
   if (!sender.tab?.url?.startsWith(studioUrlPrefix) || sender.frameId === undefined || sender.frameId === 0) {
-    return Promise.reject(new Error('The Inspector loads only into Studio previews.'));
+    return Promise.reject(new Error('The Inspector loads only into Studio previews'));
   }
   const target = sender.documentId
     ? { tabId: sender.tab.id, documentIds: [sender.documentId] }
@@ -53,7 +61,8 @@ function loadInspector(sender) {
 
 const contextMenuId = 'open-pixelprism';
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener((details) => {
+  void clearStoredAnalytics();
   // Menu items survive extension reloads and updates, so recreate from scratch
   // instead of failing on the duplicate id.
   chrome.contextMenus.removeAll(() => {
@@ -138,11 +147,11 @@ async function stylesheetTextFromDebugger(tabId, url) {
     await chrome.debugger.sendCommand(debuggee, 'CSS.enable');
     await pause(120);
     const header = headers.find((candidate) => sameStylesheet(candidate.sourceURL));
-    if (!header?.styleSheetId) throw new Error('Stylesheet was not reported by DevTools.');
+    if (!header?.styleSheetId) throw new Error('Stylesheet was not reported by DevTools');
     const result = await chrome.debugger.sendCommand(debuggee, 'CSS.getStyleSheetText', {
       styleSheetId: header.styleSheetId
     });
-    if (typeof result?.text !== 'string') throw new Error('DevTools did not return stylesheet text.');
+    if (typeof result?.text !== 'string') throw new Error('DevTools did not return stylesheet text');
     return result.text;
   } finally {
     chrome.debugger.onEvent.removeListener(onEvent);
@@ -173,7 +182,7 @@ async function captureViewport({ url, width, height, returnWindowId }) {
   const previewTab = await chrome.tabs.create({ url: 'about:blank', active: false });
   const debuggee = { tabId: previewTab.id };
   try {
-    if (!previewTab?.id) throw new Error('Unable to open a temporary viewport.');
+    if (!previewTab?.id) throw new Error('Unable to open a temporary viewport');
 
     await chrome.debugger.attach(debuggee, '1.3');
     await chrome.debugger.sendCommand(debuggee, 'Page.enable');
@@ -192,7 +201,7 @@ async function captureViewport({ url, width, height, returnWindowId }) {
       captureBeyondViewport: true,
       fromSurface: true
     }));
-    if (!result?.data) throw new Error('Chrome did not return an image for the screenshot.');
+    if (!result?.data) throw new Error('Chrome did not return an image for the screenshot');
     return `data:image/png;base64,${result.data}`;
   } finally {
     if (previewTab.id !== undefined) {
@@ -438,7 +447,7 @@ function reviewDebuggerCommand(debuggee, method, params, timeout = 8000) {
   return backgroundPromiseTimeout(
     chrome.debugger.sendCommand(debuggee, method, params),
     timeout,
-    `${method} timed out while preparing the review.`
+    `${method} timed out while preparing the review`
   );
 }
 
@@ -555,7 +564,7 @@ function trackReviewNetwork(debuggee) {
   chrome.debugger.onEvent.addListener(onEvent);
   return {
     // Idle like "networkidle": nothing in flight for a moment, or only a
-    // couple of long-lived requests (long polling, analytics) left alone.
+    // couple of long-lived requests (long polling, a page's own analytics) left alone.
     isIdle() {
       const quiet = Date.now() - lastActivity;
       return (pending.size === 0 && quiet >= 500) || (pending.size <= 2 && quiet >= 1500);
@@ -1080,7 +1089,7 @@ function measureReviewTargets(debuggee, targets) {
     expression: reviewMeasureExpression(targets),
     returnByValue: true
   }).then((result) => {
-    if (result?.exceptionDetails || !result?.result?.value) throw new Error('Review targets could not be measured.');
+    if (result?.exceptionDetails || !result?.result?.value) throw new Error('Review targets could not be measured');
     return result.result.value;
   });
 }
@@ -1161,7 +1170,7 @@ async function captureReviewShot(debuggee, targets, scrollY, width, height, scro
     captureBeyondViewport: false,
     fromSurface: true
   }));
-  if (!result?.data) throw new Error('Chrome did not return a review screenshot.');
+  if (!result?.data) throw new Error('Chrome did not return a review screenshot');
   return { measurement, dataUrl: `data:image/jpeg;base64,${result.data}` };
 }
 
@@ -1219,7 +1228,7 @@ async function captureReviewPage({ url, width, height, changes, targets = [], st
       awaitPromise: true,
       returnByValue: true
     });
-    if (changesApplied?.exceptionDetails) throw new Error('The reviewed page could not be prepared for capture.');
+    if (changesApplied?.exceptionDetails) throw new Error('The reviewed page could not be prepared for capture');
 
     // Load images first so the layout used for planning matches the captures.
     await forceEagerReviewLoading(debuggee);
@@ -1292,8 +1301,8 @@ async function withCaptureTab({ url, width, height, returnWindowId, staticPage =
   const debuggee = { tabId: previewTab.id };
   let network = null;
   try {
-    if (!previewTab?.id) throw new Error('Unable to open a temporary viewport.');
-    await backgroundPromiseTimeout(chrome.debugger.attach(debuggee, '1.3'), 4000, 'Chrome debugger did not start in time.');
+    if (!previewTab?.id) throw new Error('Unable to open a temporary viewport');
+    await backgroundPromiseTimeout(chrome.debugger.attach(debuggee, '1.3'), 4000, 'Chrome debugger did not start in time');
     await reviewDebuggerCommand(debuggee, 'Page.enable');
     await reviewDebuggerCommand(debuggee, 'Runtime.enable');
     await reviewDebuggerCommand(debuggee, 'Emulation.setDeviceMetricsOverride', {
@@ -1391,7 +1400,7 @@ async function captureFullPage({ delay = 0, requestId = '', ...options }) {
       captureBeyondViewport: true,
       fromSurface: true
     }, 30000));
-    if (!result?.data) throw new Error('Chrome did not return an image for the screenshot.');
+    if (!result?.data) throw new Error('Chrome did not return an image for the screenshot');
     return { dataUrl: `data:image/png;base64,${result.data}`, height: captureHeight, truncated: fullHeight > captureHeight };
   });
 }
@@ -1533,7 +1542,7 @@ async function waitForSnapshotResources(debuggee, network, timeout = 10000) {
 }
 
 async function captureElement({ target, steps = [], ...options }) {
-  if (!target?.element) throw new Error('No element was picked.');
+  if (!target?.element) throw new Error('No element was picked');
   return withCaptureTab(options, async (debuggee, network) => {
     const viewSteps = Array.isArray(steps) ? steps : [];
     let replay = { failed: [], popup: false };
@@ -1555,10 +1564,10 @@ async function captureElement({ target, steps = [], ...options }) {
       await renderReviewFrame(debuggee);
       await pause(300);
     }
-    if (!box?.found) throw new Error('The element was not found when the page was opened again.');
+    if (!box?.found) throw new Error('The element was not found when the page was opened again');
     if (!box.visible) {
       const failed = replay.failed.length ? ` (could not open ${replay.failed.map((label) => `“${label}”`).join(', ')})` : '';
-      throw new Error(`The element is hidden when the page is opened again${failed}.`);
+      throw new Error(`The element is hidden when the page is opened again${failed}`);
     }
     await settleReviewFrames(debuggee, 2);
     await waitForReviewImages(debuggee);
@@ -1568,7 +1577,7 @@ async function captureElement({ target, steps = [], ...options }) {
       captureBeyondViewport: box.beyond,
       fromSurface: true
     }, 30000));
-    if (!result?.data) throw new Error('Chrome did not return an image for the screenshot.');
+    if (!result?.data) throw new Error('Chrome did not return an image for the screenshot');
     return { dataUrl: `data:image/png;base64,${result.data}`, width: box.width, height: box.height };
   });
 }
@@ -1595,7 +1604,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === 'load-stylesheet') {
     const url = typeof message.url === 'string' ? message.url : '';
     if (!/^(?:https?|file):\/\//.test(url)) {
-      sendResponse({ ok: false, error: 'Unsupported stylesheet URL.' });
+      sendResponse({ ok: false, error: 'Unsupported stylesheet URL' });
       return;
     }
     const tabId = sender.tab?.id;
@@ -1615,7 +1624,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === 'save-change-report') {
     const markdown = typeof message.markdown === 'string' ? message.markdown : '';
     if (!markdown) {
-      sendResponse({ ok: false, error: 'There are no changes in the log.' });
+      sendResponse({ ok: false, error: 'There are no changes in the log' });
       return;
     }
     chrome.downloads.download({

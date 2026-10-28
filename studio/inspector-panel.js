@@ -76,53 +76,58 @@ function showInspectorPanel(editor, source) {
     const notes = [];
     const isFlex = display === 'flex';
     if (isFlex && values.width === 'auto' && values.height === 'auto') {
-      notes.push('Flex is active, but this element is auto-sized, so alignment has little free space to move children.');
+      notes.push('Flex is active, but this element is auto-sized, so alignment has little free space to move children');
     }
     if (String(context.parentDisplay || '').includes('grid')) {
-      notes.push('This element is positioned by its parent grid; use Grid Child below or edit the parent grid to move it.');
+      notes.push('This element is positioned by its parent grid; use Grid Child below or edit the parent grid to move it');
     }
     if (isFlex && Number(context.childElementCount) < 2) {
-      notes.push('Flex controls are most visible when the selected element has multiple child elements.');
+      notes.push('Flex controls are most visible when the selected element has multiple child elements');
     }
     return notes.join(' ');
   };
   const parentDisplay = String(editor.context?.parentDisplay || '');
   const parentKind = parentDisplay.includes('grid') ? 'grid' : parentDisplay.includes('flex') ? 'flex' : null;
-  // The element's interaction states: the preview shows the chosen one, and
-  // the panel reads and edits its rule (".button:hover"). A dot marks a
-  // state with edits.
-  if (Array.isArray(editor.states) && editor.states.length) {
-    const stateFields = startGroup('State');
+  // A switch of the element's states or pseudo-elements: the preview shows
+  // the chosen one, and the panel reads and edits its rule (".button:hover",
+  // ".link:hover::after"). A dot marks one with edits.
+  const switchGroup = (name, options, labels, current, changed, message) => {
+    const groupFields = startGroup(name);
     const field = document.createElement('div');
     field.className = 'inspector-field is-wide is-tabs';
     const tabs = document.createElement('span');
     tabs.className = 'inspector-tabs inspector-state-tabs';
     tabs.setAttribute('role', 'group');
-    tabs.setAttribute('aria-label', 'State');
-    const current = editor.state || 'default';
-    ['default', ...editor.states].filter((state) => INSPECTOR_STATE_LABELS[state]).forEach((state) => {
+    tabs.setAttribute('aria-label', name);
+    options.filter((option) => labels[option]).forEach((option) => {
       const tab = document.createElement('button');
       tab.type = 'button';
       tab.className = 'inspector-tab';
-      tab.textContent = INSPECTOR_STATE_LABELS[state];
-      tab.setAttribute('aria-pressed', String(state === current));
-      if (editor.stateChanges?.includes(state)) {
+      tab.textContent = labels[option];
+      tab.setAttribute('aria-pressed', String(option === current));
+      if (changed?.includes(option)) {
         const dot = document.createElement('span');
         dot.className = 'inspector-change-dot inspector-state-dot';
         dot.setAttribute('aria-hidden', 'true');
         tab.append(dot);
-        tab.title = `${INSPECTOR_STATE_LABELS[state]}: changed`;
+        tab.title = `${labels[option]}: changed`;
       }
       tab.addEventListener('click', () => {
         if (tab.getAttribute('aria-pressed') === 'true') return;
         tabs.querySelectorAll('.inspector-tab').forEach((other) => other.setAttribute('aria-pressed', String(other === tab)));
-        frame.contentWindow?.postMessage({ source: 'viewport-parade', type: 'inspector-set-state', state }, '*');
+        frame.contentWindow?.postMessage({ source: 'viewport-parade', ...message(option) }, '*');
       });
       tabs.append(tab);
     });
     field.append(tabs);
-    stateFields.append(field);
+    groupFields.append(field);
     currentGroup = undefined;
+  };
+  if (Array.isArray(editor.states) && editor.states.length) {
+    switchGroup('State', ['default', ...editor.states], INSPECTOR_STATE_LABELS, editor.state || 'default', editor.stateChanges, (state) => ({ type: 'inspector-set-state', state }));
+  }
+  if (Array.isArray(editor.pseudos) && editor.pseudos.length) {
+    switchGroup('Pseudo-element', ['', ...editor.pseudos], INSPECTOR_PSEUDO_LABELS, editor.pseudo || '', editor.pseudoChanges, (pseudo) => ({ type: 'inspector-set-pseudo', pseudo }));
   }
   let borderSideFields;
   fields.forEach(([property, label, type, wide, layoutFor, options]) => {
@@ -144,7 +149,8 @@ function showInspectorPanel(editor, source) {
       fontFamily: ['Typography'],
       boxShadow: ['Effects']
     };
-    const groupStart = groupStarts[property];
+    // A section an earlier field already started goes on.
+    const groupStart = groupStarts[property]?.[0] === currentGroup?.dataset.name ? undefined : groupStarts[property];
     const groupFields = groupStart ? startGroup(...groupStart) : currentGroup?.querySelector('.inspector-group-fields');
     if (groupStart?.[0] === 'Layout') {
       const noteNode = document.createElement('p');
@@ -439,7 +445,7 @@ function showInspectorPanel(editor, source) {
   if (frame.closest('.viewport-card')?.dataset.inspectorOutdated === 'true') {
     const outdated = document.createElement('p');
     outdated.className = 'inspector-note';
-    outdated.textContent = 'This preview runs an older PixelPrism page script, so some controls won\'t reach the page. Reload PixelPrism in chrome://extensions, then reopen Studio.';
+    outdated.textContent = 'This preview runs an older PixelPrism page script, so some controls won\'t reach the page. Reload PixelPrism in chrome://extensions, then reopen Studio';
     panelGroups.unshift(outdated);
   }
   // Text without a tag or class of its own shows its parent's values; the
@@ -447,7 +453,7 @@ function showInspectorPanel(editor, source) {
   if (editor.context?.textOf) {
     const note = document.createElement('p');
     note.className = 'inspector-note';
-    note.textContent = `This text has no tag or class of its own: its values come from ${editor.context.textOf}. A change wraps it in a span, which the agent adds to the source.`;
+    note.textContent = `This text has no tag or class of its own: its values come from ${editor.context.textOf}. A change wraps it in a span, which the agent adds to the source`;
     panelGroups.unshift(note);
   }
   inspectorPanelFields.replaceChildren(...panelGroups);
@@ -543,8 +549,9 @@ function sendInspectorFieldChange(event) {
     other.dataset.previousValue = value;
     other.showValue?.(value);
   });
-  // An emptied field drops the override, which is the same as a reset.
-  if (value.trim()) {
+  // An emptied field drops the override, which is the same as a reset; an
+  // empty alt is a value (a decorative image).
+  if (value.trim() || input.dataset.property === 'alt') {
     changed.add(input.dataset.property);
     markInspectorFieldChanged(input.dataset.property);
   } else {
@@ -653,7 +660,8 @@ function resetInspectorProperties(properties) {
   if (!frame || !changed) return;
   properties.filter((property) => changed.has(property)).forEach((property) => {
     const input = inspectorPanelFields.querySelector(`[data-property="${property}"]`);
-    frame.postMessage({ source: 'viewport-parade', type: 'inspector-editor-input', property, value: '', previousValue: input?.value ?? '' }, '*');
+    // An empty alt is decorative, not the page's own: alt is reverted instead.
+    frame.postMessage({ source: 'viewport-parade', type: 'inspector-editor-input', property, value: '', previousValue: input?.value ?? '', revert: true }, '*');
     changed.delete(property);
     unmarkInspectorFieldChanged(property);
   });

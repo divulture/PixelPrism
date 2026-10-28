@@ -25,7 +25,7 @@ function loadReviewImage(dataUrl) {
   return new Promise((resolve, reject) => {
     const image = new Image();
     image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error('A review screenshot could not be decoded.'));
+    image.onerror = () => reject(new Error('A review screenshot could not be decoded'));
     image.src = dataUrl;
   });
 }
@@ -276,7 +276,7 @@ function drawReviewCover(data, site) {
     ['Pages', data.pages.length],
     ['Screenshots', viewports.length],
     ['Comments', entries.filter((entry) => entry.kind !== 'change').length],
-    ['CSS changes', entries.filter((entry) => entry.kind === 'change').length]
+    ['CSS changes', entries.filter((entry) => entry.kind === 'change').length],
   ];
   let metricY = 560;
   metrics.forEach(([label, value]) => {
@@ -485,7 +485,7 @@ async function drawReviewViewportPages(section, finish) {
     if (change) {
       page.context.fillStyle = '#71717a';
       page.context.font = '700 15px Inter, sans-serif';
-      page.context.fillText(entry.state ? `CSS CHANGE · ${entry.state.toUpperCase()}` : 'CSS CHANGE', entryX, y);
+      page.context.fillText(['CSS CHANGE', entry.state?.toUpperCase(), entry.pseudoElement].filter(Boolean).join(' · '), entryX, y);
       y += 26;
     }
     for (const line of lines) {
@@ -528,7 +528,7 @@ async function drawReviewViewportPages(section, finish) {
   const { viewport } = section;
   const byNumber = (left, right) => left.number - right.number;
   if (!viewport.shots.length) {
-    y = drawReviewScreenshotError(page.context, viewport.error || 'Chrome did not return an image.', y);
+    y = drawReviewScreenshotError(page.context, viewport.error || 'Chrome did not return an image', y);
     for (const entry of [...viewport.entries].sort(byNumber)) await drawEntry(entry);
   }
   for (const [index, shot] of viewport.shots.entries()) {
@@ -546,7 +546,7 @@ async function drawReviewViewportPages(section, finish) {
     const image = await loadReviewImage(shot.src).catch(() => null);
     y = image
       ? drawReviewShot(page.context, image, shot, entries, y) + 44
-      : drawReviewScreenshotError(page.context, 'The screenshot could not be decoded.', y);
+      : drawReviewScreenshotError(page.context, 'The screenshot could not be decoded', y);
     for (const entry of entries) await drawEntry(entry);
   }
   await finish(page);
@@ -556,7 +556,7 @@ function canvasToJpegPage(canvas) {
   return new Promise((resolve, reject) => {
     canvas.toBlob(async (blob) => {
       if (!blob) {
-        reject(new Error('A PDF page could not be rendered.'));
+        reject(new Error('A PDF page could not be rendered'));
         return;
       }
       resolve({
@@ -721,9 +721,10 @@ async function downloadReviewPdf() {
   const contexts = reviewHtmlContexts();
   if (!contexts.length) return;
   if (!window.chrome?.runtime?.sendMessage || !window.chrome?.downloads?.download) {
-    notify('Review export is available after the extension is loaded in Chrome.', 'error', exportReviewMenu);
+    notify('Review export is available after the extension is loaded in Chrome', 'error', exportReviewMenu);
     return;
   }
+  trackProductEvent('operation_attempted', { operation: 'review_export', feature_id: 'design_review' });
   setReviewExportProgress('Preparing the review...', 0);
   try {
     const data = await captureReviewData(contexts);
@@ -738,9 +739,12 @@ async function downloadReviewPdf() {
     const missing = contexts.filter((context) => context.captureError).length;
     trackProductEvent('review_exported', { format: 'pdf', screenshots: missing ? 'partial' : 'complete' });
     notify(missing
-      ? `Review PDF downloaded. ${missing} screenshot${missing === 1 ? '' : 's'} could not be captured.`
-      : 'Review PDF downloaded.', missing ? 'error' : 'success', exportReviewMenu);
+      ? `Review PDF downloaded. ${missing} screenshot${missing === 1 ? '' : 's'} could not be captured`
+      : 'Review PDF downloaded', missing ? 'error' : 'success', exportReviewMenu);
   } catch (error) {
+    trackProductEvent('operation_failed', {
+      operation: 'review_export', feature_id: 'design_review', error_code: 'export_failed'
+    });
     notify(`Review PDF was not saved: ${error.message}`, 'error', exportReviewMenu);
   } finally {
     endReviewExportProgress();
@@ -804,6 +808,7 @@ function reviewHtmlContexts() {
   // Every entry keeps the number it has in Studio's list; an edit takes the
   // number of its entry there.
   const unlisted = siteComments().length;
+  // Page settings' entries are comments on the whole page, marked as such.
   siteComments().filter((comment) => !comment.change).forEach((comment) => addEntry(comment, {
     kind: 'comment',
     number: commentNumber(comment),
@@ -816,7 +821,7 @@ function reviewHtmlContexts() {
   // Edits recorded before they kept their view get the state from the rule.
   const withStateStep = (change) => {
     const steps = Array.isArray(change.steps) ? change.steps : [];
-    const state = Object.keys(INSPECTOR_STATE_SUFFIXES).find((name) => String(change.selector || '').endsWith(INSPECTOR_STATE_SUFFIXES[name]));
+    const state = Object.keys(INSPECTOR_STATE_SUFFIXES).find((name) => changeRuleWithoutPseudo(change).endsWith(INSPECTOR_STATE_SUFFIXES[name]));
     return state && change.element && !steps.some((step) => step.kind === 'state')
       ? { ...change, steps: [...steps, { kind: 'state', state, element: change.element, label: INSPECTOR_STATE_LABELS[state] }] }
       : change;
@@ -824,9 +829,11 @@ function reviewHtmlContexts() {
   activeChanges().map(withStateStep).forEach((change, index) => addEntry(change, {
     kind: 'change',
     number: commentNumber(comments.find((note) => note.change === changeNoteKey(change))) || unlisted + index + 1,
-    // The rule the edit goes to (".button:hover"), and its state by name.
+    // The rule the edit goes to (".button:hover", ".link::after"), its state
+    // by name and its pseudo-element.
     ruleSelector: change.selector,
     ...(change.steps?.find((step) => step.kind === 'state') ? { state: change.steps.find((step) => step.kind === 'state').label } : {}),
+    ...(changePseudo(change) ? { pseudoElement: INSPECTOR_PSEUDO_SUFFIXES[changePseudo(change)] } : {}),
     property: change.property,
     from: String(change.from || '').trim(),
     to: String(change.to || '').trim(),
@@ -850,6 +857,45 @@ function reviewHtmlContexts() {
 function workspaceRank({ workspace }) {
   const index = WORKSPACES.findIndex((candidate) => candidate.name === workspace);
   return index === -1 ? WORKSPACES.length : index;
+}
+
+function reviewChangeFamily(property) {
+  if (/^border-(?:radius|(?:top-left|top-right|bottom-right|bottom-left|start-start|start-end|end-start|end-end)-radius)$/.test(property)) return 'radius';
+  if (/^border(?:-(?:(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)(?:-(?:width|style|color))?|-(?:width|style|color))?$/.test(property)) return 'border';
+  if (/^padding(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?$/.test(property)) return 'padding';
+  if (/^margin(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?$/.test(property)) return 'margin';
+  if (/^(?:(?:row-|column-)?gap)$/.test(property)) return 'gap';
+  if (/^(?:top|right|bottom|left|inset(?:-(?:block|inline)(?:-(?:start|end))?)?)$/.test(property)) return 'inset';
+  return '';
+}
+
+// Only HTML groups related CSS fields. Keep each declaration intact so a
+// group can show exact before/after values without inventing a shorthand.
+function groupReviewChanges(contexts) {
+  contexts.forEach((context) => {
+    const groups = new Map();
+    context.entries = context.entries.filter((entry) => {
+      const family = entry.kind === 'change' ? reviewChangeFamily(entry.property) : '';
+      if (!family || !entry.targetId) return true;
+      const key = JSON.stringify([entry.targetId, entry.element?.indexPath, entry.selector, entry.state, entry.pseudoElement, family]);
+      const group = groups.get(key);
+      if (!group) {
+        groups.set(key, entry);
+        return true;
+      }
+      if (!group.changes) {
+        group.changes = [{ property: group.property, from: group.from, to: group.to }];
+        delete group.property;
+        delete group.from;
+        delete group.to;
+      }
+      group.changes.push({ property: entry.property, from: entry.from, to: entry.to });
+      group.text += `\n${entry.text}`;
+      group.number = Math.min(group.number, entry.number);
+      return false;
+    });
+  });
+  return contexts;
 }
 
 function reviewHtmlViewport(context, pageIndex, viewportIndex) {
@@ -884,7 +930,11 @@ function reviewHtmlViewport(context, pageIndex, viewportIndex) {
       target,
       shot
     };
-    if (entry.kind === 'change') Object.assign(result, { property: entry.property, from: entry.from, to: entry.to, ...(entry.state ? { state: entry.state } : {}) });
+    if (entry.kind === 'change') Object.assign(result, {
+      ...(entry.changes ? { changes: entry.changes } : { property: entry.property, from: entry.from, to: entry.to }),
+      ...(entry.state ? { state: entry.state } : {}),
+      ...(entry.pseudoElement ? { pseudoElement: entry.pseudoElement } : {})
+    });
     if (entry.attachments?.length) result.attachments = entry.attachments;
     // Kept so the review can be imported back without losing the binding.
     if (entry.element) result.element = entry.element;
@@ -920,7 +970,7 @@ function reviewHtmlViewport(context, pageIndex, viewportIndex) {
     // A tab, menu or popup the capture could not open: its comments are not on the screen.
     ...(context.failedSteps?.length ? { warning: `Could not open ${context.failedSteps.map((label) => `“${label}”`).join(', ')}` } : {}),
     shots: shots.map((shot) => ({ src: shot.dataUrl, width: shot.width, height: shot.height, scrollY: shot.scrollY })),
-    error: shots.length ? undefined : (context.captureError || 'Chrome did not return an image.'),
+    error: shots.length ? undefined : (context.captureError || 'Chrome did not return an image'),
     entries
   };
 }
@@ -941,7 +991,8 @@ function reviewHtmlData(contexts) {
     id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     createdAt: new Date().toISOString(),
     site: {
-      name: reviewSiteName({ url: pages[0]?.url, siteIdentity: identity }),
+      // A review with no captured page still names its site.
+      name: reviewSiteName({ url: pages[0]?.url || targetUrl, siteIdentity: identity }),
       logo: identity?.logoDataUrl || ''
     },
     pages: pages.map((page, pageIndex) => ({
@@ -954,7 +1005,7 @@ function reviewHtmlData(contexts) {
 
 async function buildReviewHtml(data) {
   const response = await fetch(chrome.runtime.getURL('review-viewer.html'));
-  if (!response.ok) throw new Error('The review template could not be loaded.');
+  if (!response.ok) throw new Error('The review template could not be loaded');
   const template = await response.text();
   const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`);
   // Keep the embedded JSON from closing its <script> element early.
@@ -1000,8 +1051,8 @@ async function captureReviewContext(context) {
       targets: context.targets,
       steps: context.steps,
       snapshot
-    }), 45000 + (context.targets.length * 12000), 'The page took too long to prepare.');
-    if (!response?.ok) throw new Error(response?.error || 'Unable to capture this page.');
+    }), 45000 + (context.targets.length * 12000), 'The page took too long to prepare');
+    if (!response?.ok) throw new Error(response?.error || 'Unable to capture this page');
     context.shots = response.shots;
     context.unplaced = response.unplaced;
     context.identity = response.identity;
@@ -1093,12 +1144,13 @@ async function captureReviewData(contexts) {
 }
 
 async function downloadReviewHtml() {
-  const contexts = reviewHtmlContexts();
+  const contexts = groupReviewChanges(reviewHtmlContexts());
   if (!contexts.length) return;
   if (!window.chrome?.runtime?.sendMessage || !window.chrome?.downloads?.download) {
-    notify('Review export is available after the extension is loaded in Chrome.', 'error', exportReviewMenu);
+    notify('Review export is available after the extension is loaded in Chrome', 'error', exportReviewMenu);
     return;
   }
+  trackProductEvent('operation_attempted', { operation: 'review_export', feature_id: 'design_review' });
   setReviewExportProgress('Preparing the review...', 0);
   try {
     const html = await buildReviewHtml(await captureReviewData(contexts));
@@ -1111,9 +1163,12 @@ async function downloadReviewHtml() {
     const missing = contexts.filter((context) => context.captureError).length;
     trackProductEvent('review_exported', { format: 'html', screenshots: missing ? 'partial' : 'complete' });
     notify(missing
-      ? `Design review downloaded. ${missing} screenshot${missing === 1 ? '' : 's'} could not be captured.`
-      : 'Design review downloaded.', missing ? 'error' : 'success', exportReviewMenu);
+      ? `Design review downloaded. ${missing} screenshot${missing === 1 ? '' : 's'} could not be captured`
+      : 'Design review downloaded', missing ? 'error' : 'success', exportReviewMenu);
   } catch (error) {
+    trackProductEvent('operation_failed', {
+      operation: 'review_export', feature_id: 'design_review', error_code: 'export_failed'
+    });
     notify(`Design review was not saved: ${error.message}`, 'error', exportReviewMenu);
   } finally {
     endReviewExportProgress();

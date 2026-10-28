@@ -17,10 +17,17 @@ let typographySelector;
 let componentSelector;
 let layoutSelector;
 // The selected element's own selector; componentSelector adds the state
-// being edited (".button:hover"), so edits made in Hover go to that rule.
+// and the pseudo-element being edited (".button:hover", ".link:hover::after"),
+// so edits made in Hover or on ::after go to that rule.
 let baseComponentSelector;
 let inspectorState = 'default';
 let selectedStates = [];
+// '', 'before' or 'after'; pseudoTarget is the element selectedPseudos were
+// read for, so selecting it again (to refresh the panel) keeps the choice.
+let inspectorPseudo = '';
+let selectedPseudos = [];
+let pseudoTarget;
+const editedComponentSelector = () => `${baseComponentSelector}${STATE_SUFFIX[inspectorState] || ''}${PSEUDO_SUFFIX[inspectorPseudo] || ''}`;
 // Comments get their own cursor, as in Figma: a bubble in the markers' red
 // with a plus. Its tip is the hotspot, where the comment's pin goes.
 const COMMENT_CURSOR_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><defs><filter id="s" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="1.5" stdDeviation="1.5" flood-color="#18181b" flood-opacity=".28"/></filter></defs><path d="M4 27V16.5a10.5 10.5 0 1 1 10.5 10.5z" fill="#ef4444" stroke="#fff" stroke-width="2" stroke-linejoin="round" filter="url(#s)"/><path d="M14.5 12.5v8M10.5 16.5h8" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>';
@@ -64,9 +71,9 @@ const componentProperty = {
   borderTopLeftRadius: 'border-top-left-radius', borderTopRightRadius: 'border-top-right-radius', borderBottomRightRadius: 'border-bottom-right-radius', borderBottomLeftRadius: 'border-bottom-left-radius',
   position: 'position', top: 'top', right: 'right', bottom: 'bottom', left: 'left', zIndex: 'z-index',
   borderTopWidth: 'border-top-width', borderRightWidth: 'border-right-width', borderBottomWidth: 'border-bottom-width', borderLeftWidth: 'border-left-width',
-  overflow: 'overflow', cursor: 'cursor', filter: 'filter', backdropFilter: 'backdrop-filter', aspectRatio: 'aspect-ratio'
+  overflow: 'overflow', cursor: 'cursor', filter: 'filter', backdropFilter: 'backdrop-filter', aspectRatio: 'aspect-ratio',
 };
-const colorFields = new Set(['backgroundColor', 'color', 'borderColor']);
+const colorFields = new Set(['backgroundColor', 'color', 'borderColor', ]);
 const authoredGridProperties = new Set(['gridTemplateColumns', 'gridTemplateRows', 'gridAutoColumns', 'gridAutoRows', 'gridAutoFlow', 'gridColumn', 'gridRow', 'gridArea']);
 const lengthPropertyKeys = new Set([
   'width', 'height', 'minWidth', 'maxWidth', 'minHeight', 'maxHeight',
@@ -86,7 +93,9 @@ const cssColorToHex = (value) => {
   return `#${channel(1)}${channel(2)}${channel(3)}${alpha}`.toUpperCase();
 };
 const populateEditor = (element, mode) => {
-  const styles = getComputedStyle(element);
+  // On ::before or ::after the panel reads and edits the pseudo-element.
+  const pseudo = mode === 'component' && element === selectedElement && !selectedTextNode ? inspectorPseudo : '';
+  const styles = getComputedStyle(element, PSEUDO_SUFFIX[pseudo] || null);
   editorMode = mode;
   const sharedSelector = mode === 'typography'
     ? typographySelector
@@ -97,16 +106,24 @@ const populateEditor = (element, mode) => {
   // One element is named by its own tag, id and classes, not by its path.
   const title = sharedSelector && selectorMatchesMultiple(sharedSelector === componentSelector ? baseComponentSelector : sharedSelector)
     ? `${editorModeLabel[mode]} · all ${sharedSelector}`
-    : `${editorModeLabel[mode]} · ${selectorFor(element)}`;
+    : `${editorModeLabel[mode]} · ${selectorFor(element)}${PSEUDO_SUFFIX[pseudo] || ''}`;
   const values = {};
   const valueSources = {};
   Object.keys(cssProperty).forEach((property) => { values[property] = Math.round(number(styles[property])); });
-  // Width and height are meaningful as authored CSS, not just as a rendered
-  // pixel rectangle. Keep percentages, viewport units, calc(), variables,
-  // and keywords intact; use the CSS initial value when no rule declares it.
+  // Sizes are meaningful as authored CSS, not just as a rendered pixel
+  // rectangle. Keep percentages, viewport units, calc(), variables, and
+  // keywords intact. Without a declaration of the property itself, the
+  // computed value (not getComputedStyle's used pixels) still sees logical
+  // sizes (inline-size, min-block-size…) and HTML width and height; auto, the
+  // initial value of every one but max, shows as the field's default.
   const authoredSizeDefaults = { width: 'auto', height: 'auto', minWidth: '0px', maxWidth: 'none', minHeight: '0px', maxHeight: 'none' };
+  // The style map has no pseudo-elements; their computed sizes are used.
+  const computedSizes = pseudo ? null : element.computedStyleMap?.();
   Object.keys(authoredSizeDefaults).forEach((property) => {
-    values[property] = sourceHintFor(element, cssProperty[property])?.declaredValue || authoredSizeDefaults[property];
+    const declared = sourceHintFor(element, cssProperty[property], pseudo)?.declaredValue;
+    const computed = computedSizes?.get(cssProperty[property])?.toString();
+    const used = pseudo ? styles[property] : computed;
+    values[property] = declared || (used && used !== 'auto' ? used : authoredSizeDefaults[property]);
   });
   Object.keys(typographyProperty).forEach((property) => {
     values[property] = ['fontSize', 'fontWeight', 'textIndent'].includes(property)
@@ -116,11 +133,11 @@ const populateEditor = (element, mode) => {
   // Letter spacing and line height keep the unit they were written in (em,
   // unitless 1.5, var(...)) rather than the computed pixels. Letter spacing
   // reads "normal" as the number it means: 0.
-  const authoredLetterSpacing = sourceHintFor(element, 'letter-spacing')?.declaredValue;
+  const authoredLetterSpacing = sourceHintFor(element, 'letter-spacing', pseudo)?.declaredValue;
   values.letterSpacing = authoredLetterSpacing && authoredLetterSpacing !== 'normal'
     ? authoredLetterSpacing
     : styles.letterSpacing === 'normal' ? '0' : styles.letterSpacing;
-  values.lineHeight = sourceHintFor(element, 'line-height')?.declaredValue || styles.lineHeight;
+  values.lineHeight = sourceHintFor(element, 'line-height', pseudo)?.declaredValue || styles.lineHeight;
   values.webkitTextStrokeColor = cssColorToHex(styles.webkitTextStrokeColor);
   Object.keys(componentProperty).forEach((property) => {
     values[property] = ['opacity', 'borderWidth', 'borderRadius'].includes(property)
@@ -130,7 +147,7 @@ const populateEditor = (element, mode) => {
         : styles[property];
   });
   authoredGridProperties.forEach((property) => {
-    const authored = authoredValueFor(element, componentProperty[property]);
+    const authored = authoredValueFor(element, componentProperty[property], pseudo);
     if (authored?.declaredValue) {
       values[property] = authored.declaredValue;
       valueSources[property] = {
@@ -147,17 +164,20 @@ const populateEditor = (element, mode) => {
   // pixels on a positioned element, the style map keeps it.
   ['top', 'right', 'bottom', 'left'].forEach((property) => {
     let computed = styles[property];
-    try { computed = element.computedStyleMap().get(property).toString(); } catch { /* Older engines: keep the resolved value. */ }
-    values[property] = sourceHintFor(element, property)?.declaredValue || computed;
+    if (!pseudo) {
+      try { computed = element.computedStyleMap().get(property).toString(); } catch { /* Older engines: keep the resolved value. */ }
+    }
+    values[property] = sourceHintFor(element, property, pseudo)?.declaredValue || computed;
   });
   values.display = styles.display === 'inline-flex' ? 'flex' : styles.display === 'inline-grid' ? 'grid' : styles.display;
-  const parentStyles = element.parentElement ? getComputedStyle(element.parentElement) : null;
+  // A pseudo-element's box sits in the element's own.
+  const parentStyles = pseudo ? getComputedStyle(element) : element.parentElement ? getComputedStyle(element.parentElement) : null;
   const context = {
-    childElementCount: element.children.length,
+    childElementCount: pseudo ? 0 : element.children.length,
     parentDisplay: parentStyles?.display || '',
     parentFlexDirection: parentStyles?.flexDirection || '',
     // What a picture or video shows, for the Background section.
-    media: mediaFor(element),
+    media: pseudo ? null : mediaFor(element),
     // Its kind as Layers draws it, for the icon in the panel's header.
     layerKind: selectedTextNode?.parentNode === element || isTextWrapper(element)
       ? 'text'
@@ -186,10 +206,15 @@ const populateEditor = (element, mode) => {
   });
   // The parent's own edits are not the text's.
   const changed = context.textOf ? [] : changedEntries.map(([property]) => property);
-  // The states this element can be shown in, and the ones already edited.
+  // The states and pseudo-elements this element can be shown in, and the
+  // ones already edited, alone or together (".link:hover::after").
   const states = mode === 'component' ? selectedStates : [];
-  const stateChanges = states.filter((state) => [layoutRules, typographyRules].some((rules) => rules.has(`${baseComponentSelector}${STATE_SUFFIX[state]}`)));
-  window.parent.postMessage({ source: 'viewport-parade', type: 'inspector-editor-open', editor: { mode, title, selector: sharedSelector || null, values, valueSources, context, changed, state: inspectorState, states, stateChanges } }, extensionOrigin);
+  const pseudos = mode === 'component' && !context.textOf ? selectedPseudos : [];
+  const editedRules = new Set([...layoutRules.keys(), ...typographyRules.keys()]);
+  const edited = (states, pseudos) => states.some((state) => pseudos.some((part) => editedRules.has(`${baseComponentSelector}${STATE_SUFFIX[state] || ''}${PSEUDO_SUFFIX[part] || ''}`)));
+  const stateChanges = states.filter((state) => edited([state], ['', ...pseudos]));
+  const pseudoChanges = pseudos.filter((part) => edited(['default', ...states], [part]));
+  window.parent.postMessage({ source: 'viewport-parade', type: 'inspector-editor-open', editor: { mode, title, selector: sharedSelector || null, values, valueSources, context, changed, state: inspectorState, states, stateChanges, pseudo, pseudos, pseudoChanges } }, extensionOrigin);
 };
 const isInlineTextWrapper = (element) => {
   if (!(element instanceof Element) || element.children.length > 0) return false;
@@ -217,6 +242,9 @@ const uniqueOrStructuralSelectorFor = (element, preferredSelector) => {
     // Fall through to a structural selector if a class name needs escaping in
     // an unexpected way.
   }
+  // The walk below stops at body, so body itself would get "body > ",
+  // which no stylesheet accepts.
+  if (element === document.body || element === document.documentElement) return element.tagName.toLowerCase();
   const parts = [];
   for (let current = element; current && current !== document.body; current = current.parentElement) {
     const currentTag = current.tagName.toLowerCase();
@@ -260,12 +288,15 @@ const renderTypographyRules = () => {
 const renderLayoutRules = () => {
   layoutStyle.textContent = overrideRulesText(layoutRules);
 };
-// A :hover rule counts for an element the Inspector holds in Hover.
-const matchingSelector = (element, selectorText) => selectorText.split(',').map((selector) => selector.trim()).find((selector) => {
+// A :hover rule counts for an element the Inspector holds in Hover. With
+// pseudo ('before', 'after') only that pseudo-element's rules count.
+const matchingSelector = (element, selectorText, pseudo = '') => selectorText.split(',').map((selector) => selector.trim()).find((selector) => {
   try {
     if (!selector) return null;
-    if (element.matches(selector)) return selector;
-    const forced = forcedStateSelector(selector);
+    const split = splitPseudoElement(selector);
+    if (split.pseudo !== pseudo) return null;
+    if (element.matches(split.base)) return selector;
+    const forced = forcedStateSelector(split.base);
     return forced && element.matches(forced) ? selector : null;
   } catch { return null; }
 });
@@ -329,7 +360,7 @@ const containerRuleApplies = (element, conditionText) => {
       : inlineSize >= Number(value)
   ));
 };
-const activeRuleDeclarations = (element, property) => {
+const activeRuleDeclarations = (element, property, pseudo = '') => {
   const matches = [];
   let order = 0;
   const visit = (rules, hrefOverride = null) => {
@@ -341,7 +372,7 @@ const activeRuleDeclarations = (element, property) => {
       if (rule.constructor?.name === 'CSSContainerRule' && !containerRuleApplies(element, rule.conditionText)) return;
       if (rule.type !== 1 && rule.cssRules?.length) return visit(rule.cssRules, hrefOverride);
       if (!rule.selectorText || !rule.style) return;
-      const selector = matchingSelector(element, rule.selectorText);
+      const selector = matchingSelector(element, rule.selectorText, pseudo);
       const declaredValue = rule.style.getPropertyValue(property).trim();
       if (selector && declaredValue) matches.push({
         selector,
@@ -386,36 +417,45 @@ const cascadeWinner = (matches) => matches
   .map((match) => ({ ...match, specificity: selectorSpecificity(match.selector) }))
   .sort((left, right) => Number(left.important) - Number(right.important) || compareSpecificity(left.specificity, right.specificity) || left.order - right.order)
   .at(-1);
-const authoredValueFor = (element, property) => {
-  const inlineValue = element.style?.getPropertyValue(property).trim();
+const authoredValueFor = (element, property, pseudo = '') => {
+  const inlineValue = pseudo ? '' : element.style?.getPropertyValue(property).trim();
   if (inlineValue) return { declaredValue: inlineValue, inline: true };
-  const matches = activeRuleDeclarations(element, property);
+  const matches = activeRuleDeclarations(element, property, pseudo);
   if (!matches.length) return undefined;
   return cascadeWinner(matches);
 };
-const declarationForCustomProperty = (element, variable) => {
+// A pseudo-element takes variables from its own rules, then from the element.
+const declarationForCustomProperty = (element, variable, pseudo = '') => {
+  const own = pseudo ? activeRuleDeclarations(element, variable, pseudo) : [];
+  if (own.length) {
+    const winner = cascadeWinner(own);
+    return { value: winner.declaredValue, selector: winner.selector, inline: false, scope: 'element' };
+  }
   for (let current = element; current; current = current.parentElement) {
     const inlineValue = current.style?.getPropertyValue(variable).trim();
-    if (inlineValue) return { value: inlineValue, inline: true, scope: current === element ? 'element' : 'parent' };
+    const scope = current === element && !pseudo ? 'element' : 'parent';
+    if (inlineValue) return { value: inlineValue, inline: true, scope };
     const matches = activeRuleDeclarations(current, variable);
     if (matches.length) {
       const winner = cascadeWinner(matches);
-      return { value: winner.declaredValue, selector: winner.selector, inline: false, scope: current === element ? 'element' : 'parent' };
+      return { value: winner.declaredValue, selector: winner.selector, inline: false, scope };
     }
   }
   return null;
 };
-const sourceHintFor = (element, property) => {
+// pseudo: the hint for the element's ::before or ::after, which inherits
+// from the element itself.
+const sourceHintFor = (element, property, pseudo = '') => {
   if (!element) return undefined;
-  const inlineValue = element.style?.getPropertyValue(property).trim();
+  const inlineValue = pseudo ? '' : element.style?.getPropertyValue(property).trim();
   let declaration = inlineValue ? { declaredValue: inlineValue, inline: true } : null;
   if (!declaration) {
-    declaration = authoredValueFor(element, property);
+    declaration = authoredValueFor(element, property, pseudo);
   }
   const inheritedProperties = new Set(['color', 'font-family', 'font-size', 'font-weight', 'font-style', 'font-stretch', 'line-height', 'letter-spacing', 'word-spacing', 'text-transform', 'text-align']);
   const inherited = !declaration && inheritedProperties.has(property);
-  if (inherited && element.parentElement) {
-    const parent = element.parentElement;
+  const parent = pseudo ? element : element.parentElement;
+  if (inherited && parent) {
     const parentInlineValue = parent.style?.getPropertyValue(property).trim();
     declaration = parentInlineValue ? { declaredValue: parentInlineValue, inline: true } : null;
     if (!declaration) {
@@ -424,7 +464,7 @@ const sourceHintFor = (element, property) => {
   }
   if (!declaration) return undefined;
   const variable = declaration.declaredValue.match(/var\(\s*(--[A-Za-z0-9_-]+)/)?.[1];
-  const variableDeclaration = variable ? declarationForCustomProperty(element, variable) : null;
+  const variableDeclaration = variable ? declarationForCustomProperty(element, variable, pseudo) : null;
   return {
     declaredValue: declaration.declaredValue,
     ...(variable ? { variable } : {}),
@@ -435,9 +475,36 @@ const sourceHintFor = (element, property) => {
     ...(variableDeclaration?.selector ? { variableSelector: variableDeclaration.selector } : {})
   };
 };
+// A size with no declaration of its own may be set under its logical name
+// (inline-size is the width in horizontal writing, the height in vertical),
+// or by the element's HTML width or height attribute.
+const LOGICAL_SIZES = { width: 'inline-size', height: 'block-size', 'min-width': 'min-inline-size', 'max-width': 'max-inline-size', 'min-height': 'min-block-size', 'max-height': 'max-block-size' };
+const logicalSizeFor = (element, property) => {
+  const name = LOGICAL_SIZES[property];
+  if (!name || getComputedStyle(element).writingMode.startsWith('horizontal')) return name;
+  return name.replace(/inline|block/, (axis) => (axis === 'inline' ? 'block' : 'inline'));
+};
+// What set a size's before value: a declaration of its logical name, as a
+// sourceHint naming that property, or an HTML attribute. The attribute
+// counts only when the value came from it: a div's width attribute sizes
+// nothing.
+const sizeSourceFor = (element, property, from) => {
+  if (!element) return null;
+  const logical = logicalSizeFor(element, property);
+  const hint = logical && sourceHintFor(element, logical);
+  if (hint) return { sourceHint: { ...hint, property: logical } };
+  if (property !== 'width' && property !== 'height') return null;
+  const value = element.getAttribute(property)?.trim();
+  const asCss = /^\d+(\.\d+)?$/.test(value || '') ? `${value}px` : value;
+  return value && asCss === String(from) ? { htmlAttribute: { name: property, value } } : null;
+};
 const reportStyleChange = ({ selector, property, from, to, element = selectedElement, sourceHint }) => {
   if (!selector || !property || String(from) === String(to)) return;
-  const hint = sourceHint || sourceHintFor(element, property);
+  const pseudo = pseudoOfSelector(selector);
+  const ownHint = sourceHint || sourceHintFor(element, property, pseudo);
+  // HTML size attributes and logical sizes are read for the element itself.
+  const sizeSource = ownHint || pseudo ? null : sizeSourceFor(element, property, from);
+  const hint = ownHint || sizeSource?.sourceHint;
   window.parent.postMessage({
     source: 'viewport-parade',
     type: 'inspector-style-change',
@@ -452,6 +519,7 @@ const reportStyleChange = ({ selector, property, from, to, element = selectedEle
       // declaration rather than look for one to edit. Unknown when some
       // stylesheet (cross-origin) could not be read.
       ...(!hint && everyStylesheetReadable() ? { newDeclaration: true } : {}),
+      ...(sizeSource?.htmlAttribute ? { htmlAttribute: sizeSource.htmlAttribute } : {}),
       viewport: { width: window.innerWidth, height: window.innerHeight },
       route: `${location.pathname}${location.search}${location.hash}`,
       element: element ? elementContextFor(element) : undefined,
@@ -503,7 +571,7 @@ const applyComponent = (input) => {
   if (!css || !componentSelector) return;
   const from = inputPreviousValue(input);
   const value = input.value.trim();
-  const sourceHint = sourceHintFor(selectedElement, css);
+  const sourceHint = sourceHintFor(selectedElement, css, inspectorPseudo);
   const componentValue = typographyDefinition
     ? cssValueForInput(input.dataset.property, value, typographyDefinition.unit)
     : cssValueForInput(input.dataset.property, value);
@@ -660,10 +728,11 @@ const show = (element, zone = highlightedZone) => {
   label.style.top = `${labelTop - marginTop}px`;
 };
 
-const applyEditorValue = (propertyName, rawValue, previousValue) => {
+// revert: the panel's reset, for values an empty field can't undo (alt).
+const applyEditorValue = (propertyName, rawValue, previousValue, revert) => {
   if (!selectedElement) return;
   if (propertyName === 'alt') {
-    applyAltEdit(rawValue);
+    applyAltEdit(rawValue, revert);
     return;
   }
   if (selectedTextNode) adoptTextWrapper();

@@ -185,7 +185,7 @@ const FLEX_FLOW_MENU = [
   ['Top to bottom', [['column', 'wrap', 'Wrap right'], ['column', 'wrap-reverse', 'Wrap left']]],
   ['Bottom to top', [['column-reverse', 'nowrap', 'Single column'], ['column-reverse', 'wrap', 'Wrap right'], ['column-reverse', 'wrap-reverse', 'Wrap left']]]
 ];
-const FLEX_FLOW_HINT = 'Hover an option to see direction and wrap values.';
+const FLEX_FLOW_HINT = 'Hover an option to see direction and wrap values';
 // The left-to-right icons mirrored or transposed into each direction; the
 // second entry also flips wrap-reverse to the other side.
 const FLEX_FLOW_TRANSFORMS = {
@@ -619,11 +619,11 @@ function flexAlignControl(values) {
     },
     hint: (axis, visual, state) => {
       const line = state.isColumn ? 'column' : 'row';
-      if (ALIGN_EDGE_LABELS[axis][visual]) return `Align children to the ${ALIGN_EDGE_LABELS[axis][visual].toLowerCase()} of the ${line}.`;
-      if (visual === 'space-between') return `Spread children along the ${line}, the first and last at its ends.`;
-      if (visual === 'space-around') return `Spread children along the ${line} with equal space around each.`;
-      if (visual === 'stretch') return `Stretch children to fill the ${line}'s ${state.isColumn ? 'width' : 'height'}.`;
-      if (visual === 'baseline') return 'Line children up along their text baseline.';
+      if (ALIGN_EDGE_LABELS[axis][visual]) return `Align children to the ${ALIGN_EDGE_LABELS[axis][visual].toLowerCase()} of the ${line}`;
+      if (visual === 'space-between') return `Spread children along the ${line}, the first and last at its ends`;
+      if (visual === 'space-around') return `Spread children along the ${line} with equal space around each`;
+      if (visual === 'stretch') return `Stretch children to fill the ${line}'s ${state.isColumn ? 'width' : 'height'}`;
+      if (visual === 'baseline') return 'Line children up along their text baseline';
       return '';
     },
     // Three children of different lengths, placed the way the values put them.
@@ -667,9 +667,9 @@ function gridAlignControl(values) {
     options: () => [['start', 'center', 'end'], ['stretch', 'baseline']],
     set: (axis, visual) => setInputValue(inputs[axis], visual),
     hint: (axis, visual) => {
-      if (ALIGN_EDGE_LABELS[axis][visual]) return `Align children to the ${ALIGN_EDGE_LABELS[axis][visual].toLowerCase()} of their cell.`;
-      if (visual === 'stretch') return `Stretch children to fill their cell's ${axis === 'x' ? 'width' : 'height'}.`;
-      if (visual === 'baseline') return 'Line children up along their text baseline.';
+      if (ALIGN_EDGE_LABELS[axis][visual]) return `Align children to the ${ALIGN_EDGE_LABELS[axis][visual].toLowerCase()} of their cell`;
+      if (visual === 'stretch') return `Stretch children to fill their cell's ${axis === 'x' ? 'width' : 'height'}`;
+      if (visual === 'baseline') return 'Line children up along their text baseline';
       return '';
     },
     // One child in its cell: a short bar, or the full side when stretched.
@@ -910,7 +910,7 @@ function gridMoreAlignControl(values) {
   const rows = [contentRow('justifyContent', 'Columns', 'x'), contentRow('alignContent', 'Rows', 'y')];
   const note = document.createElement('p');
   note.className = 'inspector-note inspector-dismissible-note';
-  note.textContent = 'Aligning columns and rows only shows when the element is larger than all the columns or rows it contains.';
+  note.textContent = 'Aligning columns and rows only shows when the element is larger than all the columns or rows it contains';
   const close = document.createElement('button');
   close.type = 'button';
   close.className = 'inspector-note-close';
@@ -1341,6 +1341,18 @@ function pictureListField(label, rows) {
   return field;
 }
 
+// An img's alt text as a plain field; empty is a decorative image. Pro picks
+// where it comes from instead (altTextField).
+function altInputField(media) {
+  const altField = document.createElement('div');
+  altField.className = 'inspector-field is-wide';
+  const { shell, input: alt } = childInput('alt', 'Alt text', media.alt ?? '');
+  alt.removeAttribute('inputmode');
+  alt.placeholder = media.alt === null ? 'No alt attribute' : 'Empty: decorative image';
+  altField.append(shell);
+  return altField;
+}
+
 // Picture settings in Background, each where it works: object-fit and
 // object-position for an img or video (position not while it fills the box),
 // and size, position and repeat for a background image. A field under a
@@ -1363,20 +1375,15 @@ function imageSettingsFields(values, context) {
       title: media.src || ''
     }]));
     if (media.kind === 'image') {
-      const altField = document.createElement('div');
-      altField.className = 'inspector-field is-wide';
-      const { shell, input: alt } = childInput('alt', 'Alt text', media.alt ?? '');
-      alt.removeAttribute('inputmode');
-      alt.placeholder = media.alt === null ? 'No alt attribute' : 'Empty: decorative image';
-      altField.append(shell);
-      fields.push(altField);
+      let altField = altInputField;
+      fields.push(altField(media));
     }
     const fit = menuSelectField('objectFit', 'Fit', [
-      ['fill', 'Fill', 'Stretch the picture to the box, ignoring its proportions.'],
-      ['contain', 'Contain', 'Fit the whole picture inside the box; empty bands may remain.'],
-      ['cover', 'Cover', 'Fill the box and crop what does not fit.'],
-      ['none', 'None', 'Keep the picture at its own size, cropped by the box.'],
-      ['scale-down', 'Scale down', 'Like None, or Contain when the picture is larger than the box.']
+      ['fill', 'Fill', 'Stretch the picture to the box, ignoring its proportions'],
+      ['contain', 'Contain', 'Fit the whole picture inside the box; empty bands may remain'],
+      ['cover', 'Cover', 'Fill the box and crop what does not fit'],
+      ['none', 'None', 'Keep the picture at its own size, cropped by the box'],
+      ['scale-down', 'Scale down', 'Like None, or Contain when the picture is larger than the box']
     ], String(values?.objectFit || 'fill'));
     const position = positionMatrixField('objectPosition', String(values?.objectPosition || '50% 50%'), 'picture');
     // With Fill the picture covers the whole box, so it has no position.
@@ -1403,9 +1410,9 @@ function imageSettingsFields(values, context) {
   }
   if (backgroundImage !== 'none') {
     fields.push(menuSelectField('backgroundSize', 'Size', [
-      ['auto', 'Auto', 'Keep the image at its own size.'],
-      ['cover', 'Cover', 'Fill the element and crop what does not fit.'],
-      ['contain', 'Contain', 'Fit the whole image inside the element.']
+      ['auto', 'Auto', 'Keep the image at its own size'],
+      ['cover', 'Cover', 'Fill the element and crop what does not fit'],
+      ['contain', 'Contain', 'Fit the whole image inside the element']
     ], String(values?.backgroundSize || 'auto')));
     fields.push(positionMatrixField('backgroundPosition', String(values?.backgroundPosition || '0% 0%'), 'image'));
     const repeatRow = document.createElement('div');
@@ -1456,14 +1463,14 @@ function overflowField(values) {
 // beside it. A ratio does nothing when both width and height are set, so the
 // field (and the More options that only hold it) steps aside then.
 const ASPECT_RATIOS = [
-  ['auto', 'Auto', 'Does not constrain dimensions. Ideal for layouts that need to adjust to varying widths and heights.'],
-  ['2.39 / 1', 'Anamorphic (2.39:1)', 'The ultra-wide cinema frame, for hero banners and film stills.'],
-  ['2 / 1', 'Univisium/Netflix (2:1)', 'A frame twice as wide as it is tall, as in streaming originals.'],
-  ['16 / 9', 'Widescreen (16:9)', 'The standard frame for video, screens and embeds.'],
-  ['3 / 2', 'Landscape (3:2)', 'The classic photo frame, for images and cards.'],
-  ['2 / 3', 'Portrait (2:3)', 'A tall photo frame, for posters, covers and portraits.'],
-  ['1 / 1', 'Square (1:1)', 'Equal width and height, for avatars, thumbnails and tiles.'],
-  ['custom', 'Custom', 'Set your own width to height ratio.']
+  ['auto', 'Auto', 'Does not constrain dimensions. Ideal for layouts that need to adjust to varying widths and heights'],
+  ['2.39 / 1', 'Anamorphic (2.39:1)', 'The ultra-wide cinema frame, for hero banners and film stills'],
+  ['2 / 1', 'Univisium/Netflix (2:1)', 'A frame twice as wide as it is tall, as in streaming originals'],
+  ['16 / 9', 'Widescreen (16:9)', 'The standard frame for video, screens and embeds'],
+  ['3 / 2', 'Landscape (3:2)', 'The classic photo frame, for images and cards'],
+  ['2 / 3', 'Portrait (2:3)', 'A tall photo frame, for posters, covers and portraits'],
+  ['1 / 1', 'Square (1:1)', 'Equal width and height, for avatars, thumbnails and tiles'],
+  ['custom', 'Custom', 'Set your own width to height ratio']
 ];
 
 // "4:3", "4/3" or "1.5" as CSS: "4 / 3", "1.5 / 1".
@@ -1658,9 +1665,9 @@ function typeDirectionField(values) {
 
 function typeWrapField(values) {
   return typeMenuField('Wrap', 'overflowWrap', [
-    ['normal', 'Normal', 'Breaks words only at allowed break points.'],
-    ['anywhere', 'Anywhere', 'Breaks a long word anywhere so it fits; the box can also shrink below it.'],
-    ['break-word', 'Break word', 'Breaks a long word only when it would otherwise overflow.']
+    ['normal', 'Normal', 'Breaks words only at allowed break points'],
+    ['anywhere', 'Anywhere', 'Breaks a long word anywhere so it fits; the box can also shrink below it'],
+    ['break-word', 'Break word', 'Breaks a long word only when it would otherwise overflow']
   ], String(values?.overflowWrap || 'normal'));
 }
 
@@ -1669,17 +1676,17 @@ function typeWrapField(values) {
 function typeBreakingFields(values) {
   return [
     typeMenuField('Word break', 'wordBreak', [
-      ['normal', 'Normal', 'Use the default rules for word breaking.'],
-      ['break-all', 'Break all', 'Break words between any two letters so they do not overflow.'],
-      ['keep-all', 'Keep all', 'Do not break words in Chinese, Japanese or Korean text.']
+      ['normal', 'Normal', 'Use the default rules for word breaking'],
+      ['break-all', 'Break all', 'Break words between any two letters so they do not overflow'],
+      ['keep-all', 'Keep all', 'Do not break words in Chinese, Japanese or Korean text']
     ], String(values?.wordBreak || 'normal')),
     typeMenuField('Line break', 'whiteSpace', [
-      ['normal', 'Normal', 'Text wraps when needed, and extra spaces collapse into one.'],
-      ['nowrap', 'No wrap', 'Text stays on one line; extra spaces collapse into one.'],
-      ['pre', 'Pre', 'Spaces and line breaks stay as written; text does not wrap.'],
-      ['pre-wrap', 'Pre wrap', 'Spaces and line breaks stay as written, and text wraps when needed.'],
-      ['pre-line', 'Pre line', 'Line breaks stay, extra spaces collapse, and text wraps when needed.'],
-      ['break-spaces', 'Break spaces', 'Like Pre wrap, and spaces at the end of a line can wrap too.']
+      ['normal', 'Normal', 'Text wraps when needed, and extra spaces collapse into one'],
+      ['nowrap', 'No wrap', 'Text stays on one line; extra spaces collapse into one'],
+      ['pre', 'Pre', 'Spaces and line breaks stay as written; text does not wrap'],
+      ['pre-wrap', 'Pre wrap', 'Spaces and line breaks stay as written, and text wraps when needed'],
+      ['pre-line', 'Pre line', 'Line breaks stay, extra spaces collapse, and text wraps when needed'],
+      ['break-spaces', 'Break spaces', 'Like Pre wrap, and spaces at the end of a line can wrap too']
     ], String(values?.whiteSpace || 'normal'))
   ];
 }
@@ -1933,7 +1940,7 @@ const CURSOR_ICONS = {
 function cursorField(values) {
   const groups = CURSOR_GROUPS.map(([label, keys]) => ({ label, options: keys.map((key) => [key, key]) }));
   const icons = Object.fromEntries(Object.entries(CURSOR_ICONS).map(([key, path]) => [key, inspectorIcon(path)]));
-  return typeMenuField('Cursor', 'cursor', groups, String(values?.cursor || 'auto'), { cursor: true, icons, hint: 'Hover an option to see its cursor.' }, true);
+  return typeMenuField('Cursor', 'cursor', groups, String(values?.cursor || 'auto'), { cursor: true, icons, hint: 'Hover an option to see its cursor' }, true);
 }
 
 // text-overflow works on a box that clips (overflow other than visible) and
@@ -2131,11 +2138,11 @@ function shadowListField({ property, label, noun, value, fresh, lengths: lengthF
 // element, since a static one ignores them.
 function positionFields(values, context) {
   const scheme = menuSelectField('position', 'Position', [
-    ['static', 'Static', 'Static is the default: the element follows the normal flow and ignores offsets.'],
-    ['relative', 'Relative', 'Stays in the flow; offsets shift it from where it would be. Absolute children are placed inside it.'],
-    ['absolute', 'Absolute', 'Leaves the flow; offsets place it inside the nearest positioned ancestor.'],
-    ['fixed', 'Fixed', 'Leaves the flow; offsets place it on the viewport, so it stays put while the page scrolls.'],
-    ['sticky', 'Sticky', 'Scrolls with the flow until it reaches an offset, then sticks within its parent.']
+    ['static', 'Static', 'Static is the default: the element follows the normal flow and ignores offsets'],
+    ['relative', 'Relative', 'Stays in the flow; offsets shift it from where it would be. Absolute children are placed inside it'],
+    ['absolute', 'Absolute', 'Leaves the flow; offsets place it inside the nearest positioned ancestor'],
+    ['fixed', 'Fixed', 'Leaves the flow; offsets place it on the viewport, so it stays put while the page scrolls'],
+    ['sticky', 'Sticky', 'Scrolls with the flow until it reaches an offset, then sticks within its parent']
   ], String(values?.position || 'static'));
   const field = (shell, wide) => {
     const node = document.createElement('div');
@@ -2263,8 +2270,8 @@ function positionMatrixField(property, value, noun) {
       setInputValue(input, `${written('x')} ${written('y')}`);
     },
     hint: (axis, visual) => (visual === 'center'
-      ? `Center the ${noun} ${axis === 'x' ? 'across' : 'down'} its box.`
-      : `Pin the ${noun} to the ${ALIGN_EDGE_LABELS[axis][visual]?.toLowerCase() || visual} of its box.`),
+      ? `Center the ${noun} ${axis === 'x' ? 'across' : 'down'} its box`
+      : `Pin the ${noun} to the ${ALIGN_EDGE_LABELS[axis][visual]?.toLowerCase() || visual} of its box`),
     // The picture as a small box placed in the frame.
     children: (x, y, state, className) => {
       const [left, top] = [{ start: 4, center: 17, end: 30 }[x] ?? 17, { start: 4, center: 20, end: 36 }[y] ?? 20];

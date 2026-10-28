@@ -75,7 +75,7 @@ function detectSiteBreakpoints(workspace) {
   const frame = [...document.querySelectorAll('.viewport-card')]
     .find((card) => card.dataset.previewReady === 'true')?.querySelector('iframe');
   if (!frame?.contentWindow) {
-    notify('Open a page and wait for its preview to load, then choose Site breakpoints.', 'error');
+    notify('Open a page and wait for its preview to load, then choose Site breakpoints', 'error');
     return;
   }
   const requestId = String(Date.now());
@@ -85,17 +85,17 @@ function detectSiteBreakpoints(workspace) {
     siteBreakpointsRequest = null;
     renderWorkspaces();
     if (!styles) {
-      notify('The preview did not answer. Refresh the preview and try again.', 'error');
+      notify('The preview did not answer. Refresh the preview and try again', 'error');
       return;
     }
     const { switches, viewports } = siteBreakpointViewports(styles);
     if (!viewports.length) {
-      notify('No width breakpoints were found in this page’s CSS.', 'error');
+      notify('No width breakpoints were found in this page’s CSS', 'error');
       return;
     }
     workspace.viewports = viewports;
     applyWorkspace(workspace);
-    notify(`Breakpoints in this page’s CSS: ${switches.join(', ')} px.`, 'success');
+    notify(`Breakpoints in this page’s CSS: ${switches.join(', ')} px`, 'success');
   };
   siteBreakpointsRequest = { requestId, frame: frame.contentWindow, done, timer: setTimeout(() => done(null), 15000) };
   renderWorkspaces();
@@ -144,7 +144,7 @@ function resetWorkspaceChanges(workspace) {
     hideInspectorPanel();
   }
   renderWorkspaces();
-  notify(`Style changes in ${workspace.name} reset.`, 'success');
+  notify(`Style changes in ${workspace.name} reset`, 'success');
 }
 
 function renderWorkspaces() {

@@ -284,18 +284,24 @@ const resetRecordedText = (change) => {
 // The page's own alt of each image changed here (null: it had none).
 const editedAlts = new Map();
 const pageAltOf = (element) => (editedAlts.has(element) ? editedAlts.get(element) : element.getAttribute('alt'));
+// null takes the attribute away, as the page had it before an edit.
 const setAlt = (element, value) => {
   if (!editedAlts.has(element)) editedAlts.set(element, element.getAttribute('alt'));
-  element.setAttribute('alt', value);
+  if (value === null) element.removeAttribute('alt');
+  else element.setAttribute('alt', value);
   if (value === editedAlts.get(element)) editedAlts.delete(element);
 };
 
-const applyAltEdit = (value) => {
+// revert brings back the page's own alt, even none at all, which no value
+// from the panel can say. No attribute and an empty one (decorative) both
+// read as '' in a change, so fromMissing and toMissing tell them apart.
+const applyAltEdit = (value, revert) => {
   const element = selectedElement;
   if (!(element instanceof HTMLImageElement)) return;
-  const from = element.getAttribute('alt') ?? '';
-  if (value === from) return;
-  setAlt(element, value);
+  const current = element.getAttribute('alt');
+  const next = revert ? pageAltOf(element) : value;
+  if (next === current) return;
+  setAlt(element, next);
   window.parent.postMessage({
     source: 'viewport-parade',
     type: 'inspector-style-change',
@@ -303,8 +309,11 @@ const applyAltEdit = (value) => {
       url: location.href,
       selector: stableSelectorFor(element),
       property: 'alt',
-      from,
-      to: value,
+      from: current ?? '',
+      to: next ?? '',
+      ...(current === null ? { fromMissing: true } : {}),
+      ...(next === null ? { toMissing: true } : {}),
+      ...(revert ? { revert: true } : {}),
       viewport: { width: window.innerWidth, height: window.innerHeight },
       route: `${location.pathname}${location.search}${location.hash}`,
       element: elementContextFor(element),
@@ -315,13 +324,13 @@ const applyAltEdit = (value) => {
 
 const applyRecordedAlt = (change) => {
   const element = elementForChange(change);
-  if (element instanceof HTMLImageElement) setAlt(element, String(change.value ?? ''));
+  if (element instanceof HTMLImageElement) setAlt(element, change.toMissing ? null : String(change.value ?? ''));
 };
 
 const resetRecordedAlt = (change) => {
   const element = elementForChange(change);
   if (!(element instanceof HTMLImageElement)) return;
-  const original = editedAlts.has(element) ? editedAlts.get(element) : change.from;
+  const original = editedAlts.has(element) ? editedAlts.get(element) : change.fromMissing ? null : change.from;
   if (original === null) element.removeAttribute('alt');
   else if (typeof original === 'string') element.setAttribute('alt', original);
   editedAlts.delete(element);

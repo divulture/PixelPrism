@@ -17,7 +17,11 @@ window.addEventListener('message', (event) => {
     return;
   }
   card.dataset.previewReady = 'true';
-  trackProductEvent('preview_ready');
+  trackProductEvent('preview_ready', {
+    framework: event.data.framework,
+    detection_confidence: event.data.detectionConfidence,
+    detection_method: event.data.detectionMethod
+  });
   clearTimeout(card.previewReadyTimer);
   // Only the new document says it is ready, so what the frame reports from
   // now on is about it. Heavy pages fire load seconds later, and links
@@ -34,7 +38,7 @@ window.addEventListener('message', (event) => {
     event.source.postMessage({ source: 'viewport-parade', type: 'toggle-inspector', enabled: true }, '*');
   }
   enableNavigationSync(card);
-  if (!layersFrame) setLayersFrame(event.source);
+  if (!layersFrame || card.classList.contains('is-selected')) setLayersFrame(event.source);
   // A fresh document has neither the comment picker nor markers, whatever
   // was sent to the one it replaced.
   commentPickerFrames.delete(card.querySelector('iframe'));

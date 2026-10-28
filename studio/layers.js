@@ -9,7 +9,6 @@ function setLayersOpen(open) {
   if (open) {
     setCursorModeActive(false);
     setCommentsOpen(false);
-    analyticsPanel.hidden = true;
   }
   layersPanel.hidden = !open;
   layersToggle.setAttribute('aria-pressed', String(open));
@@ -114,7 +113,14 @@ function renderLayersTree() {
     select.className = 'layers-select';
     select.textContent = node.label;
     select.title = node.label;
-    row.append(icon, select);
+    // Comments on an element too small to hit, or hidden, start here.
+    const comment = document.createElement('button');
+    comment.type = 'button';
+    comment.className = 'layers-comment';
+    comment.setAttribute('aria-label', `Comment on ${node.label}`);
+    comment.dataset.tooltip = 'Comment';
+    comment.innerHTML = window.phosphorIcon('chat-circle-text');
+    row.append(icon, select, comment);
     item.append(row);
     if (hasChildren && item.getAttribute('aria-expanded') === 'true') {
       const children = document.createElement('div');
@@ -152,6 +158,17 @@ function selectLayer(path, textIndex = null) {
   expandLayerAncestors(path);
   layersFrame.postMessage({ source: 'viewport-parade', type: 'layers-select', path: layerPathArray(path), ...(textIndex === null ? {} : { textIndex }) }, '*');
   renderLayersTree();
+}
+
+// A layer commented on from Layers: Comments opens and the box to write in
+// appears at the element's corner, as if the element had been clicked.
+function commentOnLayer(path, textIndex = null) {
+  if (!layersFrame) return;
+  const frame = layersFrame;
+  setCommentsOpen(true);
+  selectedLayerPath = path;
+  selectedLayerText = textIndex;
+  frame.postMessage({ source: 'viewport-parade', type: 'layers-select', path: layerPathArray(path), ...(textIndex === null ? {} : { textIndex }) }, '*');
 }
 
 // Breadcrumbs of the selected element, at the bottom while one is selected:
@@ -261,7 +278,8 @@ layersTree.addEventListener('click', (event) => {
     renderLayersTree();
     return;
   }
-  if (event.target.closest('.layers-select')) selectLayer(item.dataset.path, layerTextIndex(item));
+  if (event.target.closest('.layers-comment')) commentOnLayer(item.dataset.path, layerTextIndex(item));
+  else if (event.target.closest('.layers-select')) selectLayer(item.dataset.path, layerTextIndex(item));
 });
 // The text a Layers row stands for, or null for an element row.
 const layerTextIndex = (item) => (item.dataset.textIndex === undefined ? null : Number(item.dataset.textIndex));

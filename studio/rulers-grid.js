@@ -13,7 +13,7 @@ function isLayoutContrastOn(card) {
 
 function toggleLayoutContrast(card, enabled = !isLayoutContrastOn(card)) {
   if (!hasExtensionRuntime) {
-    notify('Visual editing is available in the PixelPrism Chrome extension, not this Codex preview.', 'error');
+    notify('Visual editing is available in the PixelPrism Chrome extension, not this Codex preview', 'error');
     return;
   }
   const iframe = card.querySelector('iframe');

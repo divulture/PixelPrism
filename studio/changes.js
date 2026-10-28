@@ -1,13 +1,28 @@
 // Inspector edits: recording, reconciling with the page, and applying them to a local file.
 
-// An edit to a state (".button:hover") is its own change, beside the same
-// property's edit in the default state.
+// An edit to a state (".button:hover") or to a pseudo-element
+// (".link::after", ".link:hover::after") is its own change, beside the same
+// property's edit to the element in the default state.
+// The pseudo-element an edit was made on ('before', 'after'), or null: the
+// end of its rule says.
+function changePseudo(change) {
+  const selector = String(change.selector || '');
+  return Object.keys(INSPECTOR_PSEUDO_SUFFIXES).find((pseudo) => selector.endsWith(INSPECTOR_PSEUDO_SUFFIXES[pseudo])) || null;
+}
+
+// The edit's rule without its pseudo-element: ".link:hover::after" → ".link:hover".
+function changeRuleWithoutPseudo(change) {
+  const selector = String(change.selector || '');
+  const pseudo = changePseudo(change);
+  return pseudo ? selector.slice(0, -INSPECTOR_PSEUDO_SUFFIXES[pseudo].length) : selector;
+}
+
 // The state an edit was made in ('hover', 'focus', 'active'), or null. Older
 // edits only carry it in their rule (".button:hover").
 function changeState(change) {
   const step = Array.isArray(change.steps) ? change.steps.find((item) => item.kind === 'state') : null;
   if (step?.state && INSPECTOR_STATE_SUFFIXES[step.state]) return step.state;
-  const selector = String(change.selector || '');
+  const selector = changeRuleWithoutPseudo(change);
   return Object.keys(INSPECTOR_STATE_SUFFIXES).find((state) => selector.endsWith(INSPECTOR_STATE_SUFFIXES[state])) || null;
 }
 
@@ -19,9 +34,10 @@ function isContentChange(change) {
 }
 
 function changeKey(change) {
-  const selector = String(change.selector || '');
+  const selector = changeRuleWithoutPseudo(change);
   const state = Object.values(INSPECTOR_STATE_SUFFIXES).find((suffix) => selector.endsWith(suffix)) || '';
-  return [change.url, change.viewport.width, change.viewport.height, `${change.element?.domPath || selector}${state}`, change.property].join('\u0000');
+  const pseudo = INSPECTOR_PSEUDO_SUFFIXES[changePseudo(change)] || '';
+  return [change.url, change.viewport.width, change.viewport.height, `${change.element?.domPath || selector}${state}${pseudo}`, change.property].join('\u0000');
 }
 
 function canonicalInspectorUrl(url) {
@@ -49,6 +65,10 @@ function recordInspectorChange(change) {
     to: String(change.to ?? ''),
     sourceHint: change.sourceHint && typeof change.sourceHint === 'object' ? change.sourceHint : undefined,
     newDeclaration: change.newDeclaration === true,
+    // The HTML width or height attribute the size had before.
+    ...(change.htmlAttribute && typeof change.htmlAttribute === 'object'
+      ? { htmlAttribute: { name: String(change.htmlAttribute.name), value: String(change.htmlAttribute.value) } }
+      : {}),
     viewport: { width: Math.round(viewport.width), height: Math.round(viewport.height) },
     route: typeof change.route === 'string' ? change.route : '/',
     element: change.element && typeof change.element === 'object' ? change.element : null,
@@ -56,6 +76,8 @@ function recordInspectorChange(change) {
     ...(change.wrapText && typeof change.wrapText === 'object' ? { wrapText: change.wrapText } : {}),
     // The tab, open menu or state (Hover) the edit was made in.
     ...(Array.isArray(change.steps) && change.steps.length ? { steps: change.steps } : {}),
+    // An image that had no alt attribute, not an empty one.
+    ...(change.fromMissing === true ? { fromMissing: true } : {}),
     ...(typeof change.workspace === 'string' ? { workspace: change.workspace } : {}),
     ...(change.device ? { device: String(change.device) } : {})
   };
@@ -63,11 +85,14 @@ function recordInspectorChange(change) {
   const existing = changeLog.get(key);
   // An empty alt is a value of its own (a decorative image), not a dropped edit.
   const emptyIsValue = normalized.property === 'alt';
+  // No alt and an empty one both read as '', but they differ.
+  const unchanged = (entry) => entry.from === entry.to && !entry.fromMissing;
   // An empty value means the override was dropped: the page is as it was.
+  // So does a revert, the way alt text is reset.
   if (existing) {
     existing.to = normalized.to;
-    if (existing.from === existing.to || (normalized.to === '' && !emptyIsValue)) changeLog.delete(key);
-  } else if (normalized.from !== normalized.to && (normalized.to !== '' || emptyIsValue)) {
+    if (change.revert === true || unchanged(existing) || (normalized.to === '' && !emptyIsValue)) changeLog.delete(key);
+  } else if (change.revert !== true && !unchanged(normalized) && (normalized.to !== '' || emptyIsValue)) {
     changeLog.set(key, normalized);
     trackProductEvent('inspector_edit_created');
   }
@@ -139,7 +164,10 @@ function recordedChangeMessage(change) {
     property: change.property,
     value: change.to,
     ...(change.wrapText ? { wrapText: change.wrapText } : {}),
-    ...(isContentChange(change) ? { element: change.element, from: change.from } : {})
+    ...(isContentChange(change) ? { element: change.element, from: change.from } : {}),
+    // Alt text given back to an image that had none takes the attribute away.
+    ...(change.fromMissing ? { fromMissing: true } : {}),
+    ...(change.toMissing ? { toMissing: true } : {})
   };
 }
 
@@ -207,8 +235,31 @@ function syncApplyButtons() {
   });
 }
 
-function cssOverridesFor(changes) {
+// The rules an earlier Apply wrote to the file's overrides block. An edit
+// the source already shows leaves the change log on the next load, so these
+// rules are the only record of it and must survive the next Apply.
+function savedOverrideRules(html) {
   const rules = new Map();
+  const block = String(html).match(/<style id="viewport-parade-overrides">([\s\S]*?)<\/style>/i)?.[1] || '';
+  for (const [, selector, body] of block.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    // A rule the browser rejects (an older "body > ") never applied.
+    if (!CSS.supports(`selector(${selector.trim()})`)) continue;
+    const declarations = rules.get(selector.trim()) || new Map();
+    // One declaration per line, as cssOverridesFor writes them: a ; inside
+    // a value (a data: URL) doesn't end it.
+    body.split(/;[ \t]*(?:\r?\n|$)/).forEach((declaration) => {
+      const colon = declaration.indexOf(':');
+      if (colon < 0) return;
+      const property = declaration.slice(0, colon).trim();
+      const value = declaration.slice(colon + 1).replace(/!important/i, '').trim();
+      if (property && value) declarations.set(property, value);
+    });
+    if (declarations.size) rules.set(selector.trim(), declarations);
+  }
+  return rules;
+}
+
+function cssOverridesFor(changes, rules = new Map()) {
   changes.forEach((change) => {
     const declarations = rules.get(change.selector) || new Map();
     if (change.to) declarations.set(change.property, change.to);
@@ -237,7 +288,7 @@ async function applyChangesToFile(card) {
   const changes = changesForViewport(card);
   if (!changes.length) return;
   if (!window.showOpenFilePicker) {
-    notify('Your Chrome version does not support writing to the selected file.', 'error');
+    notify('Your Chrome version does not support writing to the selected file', 'error');
     return;
   }
   button.disabled = true;
@@ -249,19 +300,20 @@ async function applyChangesToFile(card) {
         multiple: false,
         types: [{ description: 'Website HTML file', accept: { 'text/html': ['.html', '.htm'] } }]
       });
-      if (expectedName && handle.name !== expectedName) throw new Error(`Select the source file “${expectedName}”.`);
+      if (expectedName && handle.name !== expectedName) throw new Error(`Select the source file “${expectedName}”`);
       localFileHandle = handle;
     }
     if (await localFileHandle.requestPermission({ mode: 'readwrite' }) !== 'granted') {
-      throw new Error('Permission to write to the file was not granted.');
+      throw new Error('Permission to write to the file was not granted');
     }
     const file = await localFileHandle.getFile();
-    const css = cssOverridesFor(changes);
-    if (!css) throw new Error('There are no changes to write to CSS.');
+    const html = await file.text();
+    const css = cssOverridesFor(changes, savedOverrideRules(html));
+    if (!css) throw new Error('There are no changes to write to CSS');
     const writable = await localFileHandle.createWritable();
-    await writable.write(insertOverrides(await file.text(), css));
+    await writable.write(insertOverrides(html, css));
     await writable.close();
-    notify(`Changes applied to ${file.name}.`, 'success');
+    notify(`Changes applied to ${file.name}`, 'success');
   } catch (error) {
     if (error.name !== 'AbortError') notify(`Unable to apply changes: ${error.message}`, 'error');
   } finally {

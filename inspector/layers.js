@@ -167,6 +167,9 @@ const selectLayerElement = async (element, options = {}) => {
   const componentTarget = options.exact || interactionMode === 'comment' ? element : selectionTargetFor(element);
   pinned = true;
   selectedElement = componentTarget;
+  // Studio selects the same element again after each edit to refresh the
+  // panel; the outline under the pointer stays unless it is the selection.
+  if (hoverOutline.style.display !== 'none') showHoverOutline(hoveredElement);
   show(selectedElement, 'size');
   if (interactionMode === 'comment') {
     // Comments reuse the Inspector's hit testing and element-context logic,
@@ -179,11 +182,22 @@ const selectLayerElement = async (element, options = {}) => {
       releaseForcedState();
       inspectorState = 'default';
     }
+    // ::before or ::after stays chosen while the same element is selected
+    // again; selected text has neither.
+    const samePseudoTarget = pseudoTarget === componentTarget;
+    if (!samePseudoTarget || selectedTextNode) {
+      inspectorPseudo = '';
+      pseudoTarget = undefined;
+    }
     baseComponentSelector = typographySelectorFor(componentTarget);
-    componentSelector = `${baseComponentSelector}${STATE_SUFFIX[inspectorState] || ''}`;
+    componentSelector = editedComponentSelector();
     const [sheets] = await Promise.all([pageStyleSheets(), ensureAuthoredStylesheets()]);
     if (selectedElement !== componentTarget) return;
     if (!sameElement) selectedStates = statesFor(componentTarget, sheets);
+    if (pseudoTarget !== componentTarget) {
+      selectedPseudos = pseudosFor(componentTarget, sheets);
+      pseudoTarget = componentTarget;
+    }
     selectionViewSteps = viewStepsFor(componentTarget);
     populateEditor(selectedElement, 'component');
   }
@@ -201,8 +215,10 @@ const adoptTextWrapper = () => {
   const span = wrapTextNode(selectedTextNode);
   selectedTextNode = null;
   selectedElement = span;
+  inspectorPseudo = '';
+  pseudoTarget = undefined;
   baseComponentSelector = typographySelectorFor(span);
-  componentSelector = `${baseComponentSelector}${STATE_SUFFIX[inspectorState] || ''}`;
+  componentSelector = editedComponentSelector();
   postLayersSelected();
 };
 let layersRefreshTimer;

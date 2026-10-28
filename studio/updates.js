@@ -56,7 +56,7 @@ function renderUpdateAvailability() {
   const url = updateReleaseUrl(latestUpdateTag);
   updateDownload.textContent = `Download update · v${version}`;
   updateDownload.href = url;
-  updateNoticeText.textContent = `PixelPrism v${version} is ready to download.`;
+  updateNoticeText.textContent = `PixelPrism v${version} is ready to download`;
   updateNoticeDownload.href = url;
 }
 
@@ -89,11 +89,11 @@ async function fetchLatestUpdate() {
 async function checkForUpdates(manual = false) {
   if (manual) trackProductEvent('update_check_requested');
   if (!installedUpdateVersion) {
-    if (manual) setUpdateCheckStatus('Open Studio from the installed extension to check for updates.');
+    if (manual) setUpdateCheckStatus('Open Studio from the installed extension to check for updates');
     return;
   }
   if (!updateReleaseSource) {
-    if (manual) setUpdateCheckStatus('Update checks are not available for Pro yet.');
+    if (manual) setUpdateCheckStatus('Update checks are not available for Pro yet');
     return;
   }
   if (manual) {
@@ -107,11 +107,11 @@ async function checkForUpdates(manual = false) {
     renderUpdateAvailability();
     if (manual) {
       setUpdateCheckStatus(latestUpdateTag === null
-        ? 'No releases are available yet.'
-        : updateIsNewer(latestUpdateTag) ? 'A new update is available.' : 'You’re up to date.');
+        ? 'No releases are available yet'
+        : updateIsNewer(latestUpdateTag) ? 'A new update is available' : 'You’re up to date');
     }
   } catch {
-    if (manual) setUpdateCheckStatus('Couldn’t check for updates. Try again later.');
+    if (manual) setUpdateCheckStatus('Couldn’t check for updates. Try again later');
   } finally {
     updateRequest = null;
     updateCheckButton.disabled = false;

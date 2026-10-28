@@ -85,7 +85,7 @@ const installCommands = () => {
     // state's styles takes up to a second and a half, and an edit typed
     // meanwhile would otherwise land in the default rule.
     inspectorState = state;
-    componentSelector = `${baseComponentSelector}${STATE_SUFFIX[state] || ''}`;
+    componentSelector = editedComponentSelector();
     if (state === 'default') releaseForcedState();
     else await forceState(element, state);
     if (selectedElement !== element) return;
@@ -93,6 +93,15 @@ const installCommands = () => {
     show(element);
     scheduleLayoutMap();
     reportSelectedElement();
+  });
+  // The Inspector's pseudo-element switch: the panel reads and edits the
+  // element's ::before or ::after, in the state chosen beside it.
+  window.addEventListener('message', (event) => {
+    if (!isStudioMessage(event, 'inspector-set-pseudo') || !selectedElement || interactionMode !== 'edit') return;
+    inspectorPseudo = selectedPseudos.includes(event.data.pseudo) ? event.data.pseudo : '';
+    componentSelector = editedComponentSelector();
+    populateEditor(selectedElement, 'component');
+    show(selectedElement);
   });
   window.addEventListener('message', (event) => {
     if (['code-hover', 'code-select', 'code-match-selectors'].some((type) => isStudioMessage(event, type))) handleCodeMessage(event.data);

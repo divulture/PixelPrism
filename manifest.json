@@ -2,6 +2,7 @@
   "manifest_version": 3,
   "name": "PixelPrism",
   "version": "0.1.50",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA6PeufSNWJ9qyMZeUQsJO8qstm3v7qtvXoU1dS1LU10MqvqpjkmhH9l8aGEKwLy2gqdZgSaCdel6rvDIpotQcJZ6kmYcQwAvrfI5YbfQsF/MtsDbW8qdi4HhrBna9bs67npz4DhRsyhfnSvLRZE/Ku6fAAxjrgmQvGAHmqLec/+aOdprc5cAB+3mv9fMeXJRsztdDgjrOHkrzF5teEwzZEzj5fI0hJp4Iz7SwqytXxSJim19TFbtMN1355CfSPwsykwy+vhUquCaWdLT9T15lKxNKkLd7lYJS+atWwLH7XfFalaMawXs4pqStfQr4RY181q4e67505CuRsLyIJvdbPwIDAQAB",
   "description": "Inspect responsive layouts, measure elements, and fine-tune CSS visually.",
   "icons": {
     "16": "icons/pulse-16.png",
@@ -15,7 +16,8 @@
     "activeTab",
     "debugger",
     "contextMenus",
-    "scripting"
+    "scripting",
+    "storage"
   ],
   "host_permissions": [
     "<all_urls>"

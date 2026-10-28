@@ -84,13 +84,16 @@ let selectionViewSteps = [];
 // box there and the marker keeps that spot in the element.
 let commentPickPoint = null;
 // A comment's place: the click, or the element's corner when it was picked
-// another way (Layers); the offset is kept only for a click.
+// another way (Layers); the offset is kept only for a click. A hidden
+// element has no corner, so the box opens at its nearest shown ancestor's.
 const commentPlaceFor = (element) => {
   const rect = element.getBoundingClientRect();
   const clicked = commentPickPoint;
   commentPickPoint = null;
-  const x = clicked ? clicked.x : Math.min(Math.max(rect.left, 0), innerWidth);
-  const y = clicked ? clicked.y : Math.min(Math.max(rect.top, 0), innerHeight);
+  let corner = rect;
+  for (let node = element; !clicked && node.parentElement && !corner.width && !corner.height; node = node.parentElement) corner = node.parentElement.getBoundingClientRect();
+  const x = clicked ? clicked.x : Math.min(Math.max(corner.left, 0), innerWidth);
+  const y = clicked ? clicked.y : Math.min(Math.max(corner.top, 0), innerHeight);
   return {
     point: { x: Math.round(x), y: Math.round(y) },
     ...(clicked ? { offset: { x: Math.round(x - rect.left), y: Math.round(y - rect.top) } } : {})
@@ -124,7 +127,10 @@ const textNodeAt = (element, x, y) => {
 const isStudioPress = (event) => event.composedPath().some((node) => node instanceof Element && node.hasAttribute('data-viewport-parade-overlay'));
 const refreshHoveredElement = () => {
   if ((active || commentPickerActive || capturePickerActive) && (!pinned || capturePickerActive) && pointerInside && hoveredElement) show(hoveredElement);
-  else if (selectedElement) show(selectedElement);
+  else if (selectedElement) {
+    show(selectedElement);
+    if (hoverOutline.style.display !== 'none' && pointerInside) showHoverOutline(hoveredElement);
+  }
   scheduleLayoutMap();
 };
 
@@ -132,8 +138,15 @@ const refreshHoveredElement = () => {
 const installPicking = () => {
   document.addEventListener('pointermove', (event) => {
     pointerInside = true;
-    if ((!active && !commentPickerActive && !capturePickerActive) || (pinned && !capturePickerActive)) return;
+    if (!active && !commentPickerActive && !capturePickerActive) return;
     const hoveredText = active && !capturePickerActive && interactionMode !== 'comment' ? textNodeAt(event.target, event.clientX, event.clientY) : null;
+    if (pinned && !capturePickerActive) {
+      // The selection keeps its overlays; what lies under the pointer only
+      // gets an outline, so another element can still be aimed at.
+      hoveredElement = event.target;
+      if (active && interactionMode === 'edit') showHoverOutline(hoveredText || hoveredElement);
+      return;
+    }
     if (hoveredText) {
       hoveredElement = event.target;
       showTextNode(hoveredText);

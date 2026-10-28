@@ -61,12 +61,13 @@ const shortText = (text) => {
   return value.length > 40 ? `${value.slice(0, 39)}…` : value;
 };
 
+// An edit to ::before or ::after names it: "::after width: 0px → 100%".
 function changeNoteText(changes) {
   return changes.map((change) => (change.property === 'text'
     ? `Text: “${shortText(change.from)}” → “${shortText(change.to)}”`
     : change.property === 'alt'
-      ? `Alt: “${shortText(change.from)}” → “${shortText(change.to)}”`
-      : `${change.property}: ${change.from || 'none'} → ${change.to}`)).join('\n');
+      ? `Alt: ${change.fromMissing ? 'none' : `“${shortText(change.from)}”`} → “${shortText(change.to)}”`
+      : `${changePseudo(change) ? `${INSPECTOR_PSEUDO_SUFFIXES[changePseudo(change)]} ` : ''}${change.property}: ${change.from || 'none'} → ${change.to}`)).join('\n');
 }
 
 function forgetCommentUi(id) {
@@ -100,10 +101,11 @@ function syncChangeNotes() {
       return;
     }
     const [first] = changes;
-    // An edit made in a state is recorded on its rule (".card:hover"); the
-    // marker goes on the element.
+    // An edit made in a state or on a pseudo-element is recorded on its rule
+    // (".card:hover", ".link::after"); the marker goes on the element.
+    const rule = changeRuleWithoutPseudo(first);
     const suffix = INSPECTOR_STATE_SUFFIXES[changeState(first)] || '';
-    const selector = suffix && first.selector.endsWith(suffix) ? first.selector.slice(0, -suffix.length) : first.selector;
+    const selector = suffix && rule.endsWith(suffix) ? rule.slice(0, -suffix.length) : rule;
     comments.push({
       type: 'change',
       change: key,
@@ -130,7 +132,7 @@ function revertChangeNote(note) {
     hideInspectorPanel();
   }
   revertChanges(changes);
-  notify(`Edits to ${note.element?.selector || 'the element'} reverted.`);
+  notify(`Edits to ${note.element?.selector || 'the element'} reverted`);
 }
 
 function isCommentAnchored(comment) {
@@ -345,6 +347,7 @@ function renderCommentItem(comment, index) {
   const id = commentId(comment);
   const placement = commentPlacement(comment);
   const isPlacing = placingCommentId === id;
+  // Page settings' entries act as edit entries do: deleting one resets them.
   const isChange = Boolean(comment.change);
   const item = document.createElement('li');
   item.className = `comment-item is-${placement}`;
@@ -409,7 +412,7 @@ function renderCommentItem(comment, index) {
     const stateText = document.createElement('span');
     stateText.className = 'comment-state';
     stateText.textContent = isPlacing ? state : `· ${state}`;
-    if (placement === 'approx' && !isPlacing) stateText.title = 'The element is gone; the marker shows where it was when the comment was left.';
+    if (placement === 'approx' && !isPlacing) stateText.title = 'The element is gone; the marker shows where it was when the comment was left';
     meta.append(stateText);
   }
   const actions = document.createElement('div');
@@ -425,8 +428,9 @@ function renderCommentItem(comment, index) {
   more.innerHTML = window.phosphorIcon('dots-three');
   const remove = document.createElement('button');
   remove.type = 'button'; remove.className = 'comment-delete tooltip-trigger'; remove.dataset.action = 'delete';
-  remove.setAttribute('aria-label', isChange ? `Revert edits ${index + 1}` : `Delete comment ${index + 1}`);
-  remove.dataset.tooltip = isChange ? 'Revert edits' : 'Delete comment';
+  const removeLabel = isChange ? 'Revert edits' : 'Delete comment';
+  remove.setAttribute('aria-label', `${removeLabel} ${index + 1}`);
+  remove.dataset.tooltip = removeLabel;
   remove.innerHTML = window.phosphorIcon('trash');
   // An edit entry is not written by hand: nothing to edit, attach or move.
   actions.append(...(isChange ? [remove] : [remove, more]));
@@ -480,7 +484,7 @@ function commentHandoffNote(comment, id) {
   // Not a <p>: the comment's own text styles (.comment-item p) would apply.
   const note = document.createElement('div');
   note.className = 'inspector-note';
-  note.textContent = 'Agents handoff leaves out comments with only images. Add text to send this one to your agent; the images still show in the HTML/PDF review.';
+  note.textContent = 'Agents handoff leaves out comments with only images. Add text to send this one to your agent; the images still show in the HTML/PDF review';
   clip.append(note);
   wrap.append(clip);
   return wrap;
@@ -593,8 +597,8 @@ function moveComment(id, card, { element, pin, route, offset, same = false, step
   renderComments();
   syncCommentMarkers();
   const number = commentNumber(comment);
-  if (same) notify(`Marker ${number} moved within ${element.selector || 'its element'}.`, 'success');
-  else notify(`Comment ${number} moved to ${pin ? 'the pinned point' : element.selector || 'the element'}.`, 'success');
+  if (same) notify(`Marker ${number} moved within ${element.selector || 'its element'}`, 'success');
+  else notify(`Comment ${number} moved to ${pin ? 'the pinned point' : element.selector || 'the element'}`, 'success');
 }
 
 function setCommentPicker(enabled) {
@@ -621,7 +625,6 @@ function setCommentsOpen(open) {
     setCursorModeActive(false);
     setLayersOpen(false);
     setInspectorMode(false);
-    analyticsPanel.hidden = true;
   }
   commentsPanel.hidden = !open;
   commentsToggle.setAttribute('aria-pressed', String(open));
@@ -647,15 +650,15 @@ function addComment(rawComment) {
   saveComments();
   syncCommentComposer();
   closeCommentComposer();
-  renderComments(); syncChangeUi(); syncCommentMarkers(); notify('Comment added to the pending handoff.', 'success');
+  renderComments(); syncChangeUi(); syncCommentMarkers(); notify('Comment added to the pending handoff', 'success');
 }
 
 function reviewDataFromHtml(text) {
   const parsed = new DOMParser().parseFromString(text, 'text/html');
   const raw = parsed.getElementById('pixelprism-review-data')?.textContent;
-  if (!raw || raw.includes('{{PIXELPRISM_REVIEW_DATA}}')) throw new Error('This file is not a PixelPrism HTML review.');
+  if (!raw || raw.includes('{{PIXELPRISM_REVIEW_DATA}}')) throw new Error('This file is not a PixelPrism HTML review');
   const data = JSON.parse(raw);
-  if (!Array.isArray(data?.pages)) throw new Error('This review has no pages.');
+  if (!Array.isArray(data?.pages)) throw new Error('This review has no pages');
   return data;
 }
 
@@ -687,6 +690,11 @@ async function importReviewFile(file) {
           done += 1;
           return;
         }
+        // Merging screenshots changes their container, not the comment's source.
+        const sourceUrl = canonicalInspectorUrl(typeof entry.origin?.url === 'string' ? entry.origin.url : url);
+        const sourceViewport = entry.origin?.viewport && typeof entry.origin.viewport === 'object' ? entry.origin.viewport : viewport;
+        let sourceRoute = route;
+        try { sourceRoute = new URL(sourceUrl).pathname || '/'; } catch { /* Keep the page route. */ }
         let element = null;
         if (entry.element && typeof entry.element === 'object') element = entry.element;
         else if (entry.target !== 'page' && entry.selector) element = { selector: String(entry.selector) };
@@ -696,14 +704,14 @@ async function importReviewFile(file) {
         const images = Array.isArray(entry.attachments) ? entry.attachments.filter((image) => typeof image?.src === 'string') : [];
         const comment = {
           type: 'comment',
-          url,
-          route,
-          viewport: { width: Math.round(Number(viewport.width) || 0), height: Math.round(Number(viewport.height) || 0) },
-          ...(typeof viewport.workspace === 'string' && viewport.workspace ? { workspace: viewport.workspace } : {}),
-          ...(typeof viewport.device === 'string' && viewport.device ? { device: viewport.device } : {}),
+          url: sourceUrl,
+          route: sourceRoute,
+          viewport: { width: Math.round(Number(sourceViewport.width) || 0), height: Math.round(Number(sourceViewport.height) || 0) },
+          ...(typeof sourceViewport.workspace === 'string' && sourceViewport.workspace ? { workspace: sourceViewport.workspace } : {}),
+          ...(typeof sourceViewport.device === 'string' && sourceViewport.device ? { device: sourceViewport.device } : {}),
           ...(element ? { element } : {}),
           ...(pin ? { pin } : {}),
-          ...(Array.isArray(viewport.steps) && viewport.steps.length ? { steps: viewport.steps } : {}),
+          ...(Array.isArray(sourceViewport.steps) && sourceViewport.steps.length ? { steps: sourceViewport.steps } : {}),
           ...(!pin && element && entry.offset && Number.isFinite(entry.offset.x) && Number.isFinite(entry.offset.y) ? { offset: { x: Math.round(entry.offset.x), y: Math.round(entry.offset.y) } } : {}),
           comment: String(entry.text || ''),
           // Names and sizes only for now: enough to tell duplicates apart.
@@ -743,7 +751,7 @@ async function importReviewFile(file) {
   if (duplicates) notes.push(`${duplicates} already in the list`);
   if (changes) notes.push(`${changes} CSS change${changes === 1 ? '' : 's'} skipped`);
   if (lostImages) notes.push(`${lostImages} image${lostImages === 1 ? '' : 's'} could not be stored`);
-  notify(`Imported ${added} comment${added === 1 ? '' : 's'}${notes.length ? ` (${notes.join(', ')})` : ''}.`, added ? 'success' : undefined);
+  notify(`Imported ${added} comment${added === 1 ? '' : 's'}${notes.length ? ` (${notes.join(', ')})` : ''}`, added ? 'success' : undefined);
 }
 commentsForm.addEventListener('submit', (event) => { event.preventDefault(); addComment(commentInput.value); });
 commentAttachButton.addEventListener('click', () => {
@@ -915,7 +923,7 @@ commentsList.addEventListener('click', (event) => {
     renderComments();
     syncChangeUi();
     syncCommentMarkers();
-    notify('Comment removed from the pending handoff.');
+    notify('Comment removed from the pending handoff');
     return;
   }
   if (action === 'move') {
@@ -987,7 +995,7 @@ function saveCommentEdit() {
   // Text added to an image-only comment makes it something to hand off.
   syncChangeUi();
   syncCommentMarkers();
-  if (changed) notify(`Comment ${commentNumber(comment)} updated.`, 'success');
+  if (changed) notify(`Comment ${commentNumber(comment)} updated`, 'success');
 }
 
 function startGroupTitleEdit(url) {
@@ -1111,13 +1119,14 @@ function setCommentsMenuOpen(open) {
 }
 
 // Everything in the list for this site goes: written comments are deleted,
-// and Inspector edits are reverted, so the pages go back to their old values.
+// and Inspector edits are reverted (and Page settings reset), so the pages
+// go back to their old values.
 function deleteAllComments() {
   const count = siteComments().length;
   const written = siteComments().filter((comment) => !comment.change);
   const edits = [...changeLog.values()].filter((change) => isCurrentSite(change.url));
   if (!count && !edits.length) return;
-  if (!window.confirm(`Delete all ${count} comment${count === 1 ? '' : 's'} on every page of this site?\n\nInspector edits go back to their original values. This cannot be undone.`)) return;
+  if (!window.confirm(`Delete all ${count} comment${count === 1 ? '' : 's'} on every page of this site?\n\nInspector edits go back to their original values. This cannot be undone`)) return;
   forgetAttachments(written.flatMap(commentAttachments));
   written.forEach((comment) => {
     comments.splice(comments.indexOf(comment), 1);
@@ -1134,7 +1143,7 @@ function deleteAllComments() {
   renderComments();
   syncChangeUi();
   syncCommentMarkers();
-  notify(`${count} comment${count === 1 ? '' : 's'} deleted.`);
+  notify(`${count} comment${count === 1 ? '' : 's'} deleted`);
 }
 
 commentsMenuToggle.addEventListener('click', () => setCommentsMenuOpen(!commentsMenuOpen));

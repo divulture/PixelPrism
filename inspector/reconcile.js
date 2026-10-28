@@ -38,7 +38,8 @@ const valuesMatch = (property, actual, expected) => {
 const actualValueFor = (element, property) => {
   // The page's own text, not an edit Studio brought back into this preview.
   if (['text', 'text-content', 'textContent'].includes(property)) return textValueFor(editedTexts.has(element) ? { textContent: editedTexts.get(element) } : element);
-  if (property === 'alt') return pageAltOf(element) ?? '';
+  // No alt attribute matches no value, not even a decorative ''.
+  if (property === 'alt') return pageAltOf(element);
   const value = getComputedStyle(element).getPropertyValue(property);
   return value ? value.trim() : null;
 };

@@ -318,7 +318,7 @@ const applyCommentMarkers = (data) => {
     const node = document.createElement('div');
     node.className = 'marker';
     node.textContent = String(item.number);
-    node.title = `${item.number}. ${truncate(item.text, 160)}\n\nDrag within the element to move the marker, or onto another element to attach the comment there. Hold Alt to pick the exact element under the pointer.`;
+    node.title = `${item.number}. ${truncate(item.text, 160)}\n\nDrag within the element to move the marker, or onto another element to attach the comment there. Hold Alt to pick the exact element under the pointer`;
     node.dataset.commentId = item.id;
     commentShadow.append(node);
     const pin = item.pin && Number.isFinite(item.pin.x) && Number.isFinite(item.pin.y) ? { x: item.pin.x, y: item.pin.y } : null;

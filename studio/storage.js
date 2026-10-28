@@ -39,7 +39,8 @@ function saveComments() {
   const byOrigin = new Map([...storedCommentOrigins].map((origin) => [origin, []]));
   comments.forEach((comment) => {
     const origin = commentOrigin(comment.url);
-    // Edit entries are rebuilt from the stored changes (syncChangeNotes).
+    // Edit entries are rebuilt from the stored changes (syncChangeNotes),
+    // Page settings' from the audit's store.
     if (!origin || comment.change) return;
     if (!byOrigin.has(origin)) byOrigin.set(origin, []);
     byOrigin.get(origin).push(comment);
@@ -123,7 +124,7 @@ function restoreComments(origin = commentOrigin(targetUrl)) {
   syncChangeUi();
   if (!commentsPanel.hidden) renderComments();
   syncCommentMarkers();
-  notify(`${restored.length} saved comment${restored.length === 1 ? '' : 's'} restored.`);
+  notify(`${restored.length} saved comment${restored.length === 1 ? '' : 's'} restored`);
 }
 
 // A short display name the user typed in for a page, in place of its path.
