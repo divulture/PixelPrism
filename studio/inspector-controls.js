@@ -2531,7 +2531,8 @@ function attachUnitSelect(shell, input, units, send) {
   // No unit (line-height 1.6: times the font size) reads as a dash.
   units.forEach((unit) => unitSelect.add(new Option(unit || '-', unit)));
   const bareUnit = units.includes('') ? '' : 'px';
-  const split = (text) => String(text).trim().match(/^([-+]?\d*\.?\d+)\s*([a-z]+|%)?$/i);
+  // A decimal comma, as many locales write it, reads as a point.
+  const split = (text) => String(text).trim().replace(/^([-+]?\d*),(\d+)/, '$1.$2').match(/^([-+]?\d*\.?\d+)\s*([a-z]+|%)?$/i);
   const show = (value) => {
     const match = split(value);
     unitSelect.hidden = !match;

@@ -21,14 +21,58 @@ const scaleValue = (factors) => (factors.every((factor) => factor === '1')
   ? 'none'
   : factors.length === 2 && factors[0] === factors[1] ? factors[0] : factors.join(' '));
 
+// The angle of the one rotate() or rotateZ() in a transform; null when there
+// is none, or more than one to choose from.
+const TRANSFORM_ROTATION = /\brotateZ?\(\s*([^()]*?)\s*\)/gi;
+const transformRotation = (value) => {
+  const found = [...String(value).matchAll(TRANSFORM_ROTATION)];
+  return found.length === 1 ? found[0][1] : null;
+};
+const withTransformRotation = (value, angle) => (transformRotation(value) === null
+  ? null
+  : String(value).replace(TRANSFORM_ROTATION, (match) => match.replace(/\(.*\)/, `(${angle})`)));
+
 function transformFields(values) {
+  const transformValue = String(values?.transform || 'none');
+  const transform = typeField('Functions', true);
+  const written = childInput('transform', 'Transform functions', transformValue);
+  written.shell.querySelector('.inspector-input-prefix').remove();
+  transform.append(written.shell);
+  // Only a transform the site set has something to show; new turns and
+  // flips go to Rotate and Flip.
+  transform.hidden = transformValue === 'none';
+
   const rotate = typeField('Rotate');
   rotate.title = 'Rotate';
   const rotateValue = String(values?.rotate || 'none');
-  const angle = childInput('rotate', 'Rotate', rotateValue === 'none' ? '0deg' : rotateValue, ANGLE_UNITS);
+  // Sites mostly turn elements with transform: rotate(…). Without a rotate
+  // property, Rotate shows that angle and edits it inside the transform, so
+  // the two never add up to a turn nobody wrote.
+  const inTransform = rotateValue === 'none' && transformRotation(transformValue) !== null;
+  const angle = childInput(inTransform ? '' : 'rotate', 'Rotate', inTransform ? transformRotation(transformValue) : rotateValue === 'none' ? '0deg' : rotateValue, ANGLE_UNITS);
   angle.shell.querySelector('.inspector-input-prefix').innerHTML = inspectorIcon(TRANSFORM_ICON_PATHS.rotate);
-  // Shown as 0deg, but the agent is told what the page had.
-  angle.dataInput.dataset.previousValue = rotateValue;
+  if (inTransform) {
+    rotate.title = 'Rotate: the rotate() in Functions';
+    // The angle is no property of its own: Functions sends the change.
+    delete angle.dataInput.dataset.property;
+    delete angle.dataInput.dataset.previousValue;
+    angle.shell.dataset.properties = 'transform';
+    angle.dataInput.addEventListener('change', () => {
+      const next = withTransformRotation(written.dataInput.value, angle.dataInput.value.trim() || '0deg');
+      if (next) setInputValue(written.dataInput, next);
+    });
+    rotate.classList.add('inspector-syncs');
+    rotate.refreshFromPanel = () => {
+      const current = transformRotation(written.dataInput.value);
+      if (current !== null && current !== angle.dataInput.value) {
+        angle.dataInput.value = current;
+        angle.dataInput.showValue(current);
+      }
+    };
+  } else {
+    // Shown as 0deg, but the agent is told what the page had.
+    angle.dataInput.dataset.previousValue = rotateValue;
+  }
   rotate.append(angle.shell);
 
   // Flips keep the size factors and turn only their sign, so a scaled
@@ -63,15 +107,6 @@ function transformFields(values) {
   flip.refreshFromPanel = syncFlips;
   syncFlips();
   flip.append(tabs, scale);
-
-  const transformValue = String(values?.transform || 'none');
-  const transform = typeField('Functions', true);
-  const written = childInput('transform', 'Transform functions', transformValue);
-  written.shell.querySelector('.inspector-input-prefix').remove();
-  transform.append(written.shell);
-  // Only a transform the site set has something to show; new turns and
-  // flips go to Rotate and Flip.
-  transform.hidden = transformValue === 'none';
 
   // The pivot does nothing until the element is turned, flipped or transformed.
   const origin = positionMatrixField('transformOrigin', String(values?.transformOrigin || 'center center'), 'pivot');

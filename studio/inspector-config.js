@@ -188,5 +188,7 @@ const COLOR_FIELDS = new Set(['backgroundColor', 'color', 'borderColor']);
 const LENGTH_UNITS = ['px', 'pt', 'em', 'rem', 'ch', 'ex', 'vw', 'vh', 'vmin', 'vmax', 'svh', 'lvh', 'dvh'];
 // Line height also takes a bare multiplier of the font size ("1.5") and %.
 const LINE_HEIGHT_UNITS = ['', '%', ...LENGTH_UNITS];
+// Opacity is a fraction (0.5) or a percentage (50%).
+const OPACITY_UNITS = ['', '%'];
 // Sizes are often a share of the parent as well.
 const SIZE_UNITS = ['px', '%', ...LENGTH_UNITS.slice(1)];

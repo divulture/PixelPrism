@@ -311,8 +311,11 @@ function showInspectorPanel(editor, source) {
     }
     const input = type === 'select' ? document.createElement('select') : document.createElement('input');
     if (type !== 'select') {
-      input.type = CSS_LENGTH_FIELDS.has(property) ? 'text' : type;
-      if (CSS_LENGTH_FIELDS.has(property)) input.inputMode = 'decimal';
+      // A number input silently drops what it can't parse (a decimal comma,
+      // "ю" typed for "." on a Russian layout), so values are typed as text.
+      const asText = CSS_LENGTH_FIELDS.has(property) || property === 'opacity';
+      input.type = asText ? 'text' : type;
+      if (asText) input.inputMode = 'decimal';
     }
     input.name = property;
     input.dataset.property = property;
@@ -383,6 +386,7 @@ function showInspectorPanel(editor, source) {
       if (property === 'lineHeight') field.append(lengthUnitControl(shell, input, LINE_HEIGHT_UNITS));
       if (isDimension) field.append(lengthUnitControl(shell, input, SIZE_UNITS));
       if (property === 'borderWidth') field.append(lengthUnitControl(shell, input, LENGTH_UNITS));
+      if (property === 'opacity') field.append(lengthUnitControl(shell, input, OPACITY_UNITS));
     } else if (colorPicker) {
       const shell = document.createElement('span');
       shell.className = 'inspector-color-shell';
