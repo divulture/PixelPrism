@@ -28,6 +28,8 @@ const INSPECTOR_FIELDS = {
     ['marginTop', 'M top', 'number'], ['marginRight', 'M right', 'number'], ['marginBottom', 'M bottom', 'number'], ['marginLeft', 'M left', 'number'], ['paddingTop', 'P top', 'number'], ['paddingRight', 'P right', 'number'], ['paddingBottom', 'P bottom', 'number'], ['paddingLeft', 'P left', 'number'],
     // Position scheme, offsets and stacking; see positionFields.
     ['position', 'Position', 'custom'],
+    // Rotation, flips, their pivot and the written transform; see transformFields.
+    ['rotate', 'Rotate', 'custom'],
     ['backgroundColor', 'Background', 'text', true],
     // Picture settings for an img / video or a background image.
     ['imageSettings', 'Image', 'custom'],

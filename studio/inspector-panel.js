@@ -144,6 +144,7 @@ function showInspectorPanel(editor, source) {
       width: ['Dimensions'],
       marginTop: ['Spacing'],
       position: ['Position'],
+      rotate: ['Transform'],
       backgroundColor: ['Background'],
       borderWidth: ['Border'],
       fontFamily: ['Typography'],
@@ -215,6 +216,10 @@ function showInspectorPanel(editor, source) {
     }
     if (property === 'position') {
       groupFields.append(...positionFields(editor.values, editor.context));
+      return;
+    }
+    if (property === 'rotate') {
+      groupFields.append(...transformFields(editor.values));
       return;
     }
     if (property === 'overflow') {

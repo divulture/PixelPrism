@@ -756,6 +756,7 @@ body:has(#layers-panel:not([hidden])) .workspace { padding-inline-start: calc(mi
 /* Flex alignment: the matrix beside the X and Y menus. */
 /* The cube is as tall as the two selects beside it: two fields and a 4px gap. */
 .inspector-field.inspector-align { grid-template-columns: calc(var(--field-height) * 2 + 4px) minmax(0, 1fr); gap: 4px; }
+.inspector-field.inspector-align > .inspector-type-label { grid-column: 1 / -1; }
 .inspector-align-matrix { position: relative; inline-size: calc(var(--field-height) * 2 + 4px); block-size: calc(var(--field-height) * 2 + 4px); box-sizing: border-box; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); }
 .inspector-align-matrix svg { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; pointer-events: none; }
 .inspector-align-dot { fill: var(--fg-c4c4c8); }

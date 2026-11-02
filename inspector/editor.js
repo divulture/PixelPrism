@@ -72,6 +72,7 @@ const componentProperty = {
   position: 'position', top: 'top', right: 'right', bottom: 'bottom', left: 'left', zIndex: 'z-index',
   borderTopWidth: 'border-top-width', borderRightWidth: 'border-right-width', borderBottomWidth: 'border-bottom-width', borderLeftWidth: 'border-left-width',
   overflow: 'overflow', cursor: 'cursor', filter: 'filter', backdropFilter: 'backdrop-filter', aspectRatio: 'aspect-ratio',
+  rotate: 'rotate', scale: 'scale', transform: 'transform', transformOrigin: 'transform-origin',
 };
 const colorFields = new Set(['backgroundColor', 'color', 'borderColor', ]);
 const authoredGridProperties = new Set(['gridTemplateColumns', 'gridTemplateRows', 'gridAutoColumns', 'gridAutoRows', 'gridAutoFlow', 'gridColumn', 'gridRow', 'gridArea']);
@@ -91,6 +92,17 @@ const cssColorToHex = (value) => {
   const channel = (index) => Math.max(0, Math.min(255, Math.round(Number(match[index])))).toString(16).padStart(2, '0');
   const alpha = match[4] === undefined ? '' : Math.max(0, Math.min(255, Math.round(Number(match[4]) * 255))).toString(16).padStart(2, '0');
   return `#${channel(1)}${channel(2)}${channel(3)}${alpha}`.toUpperCase();
+};
+// "60px 20px" on a 120 × 40 box reads "center center"; other offsets stay.
+const transformOriginKeywords = (value, width, height) => {
+  const [x, y, ...rest] = String(value).trim().split(/\s+/);
+  const keyword = (part, size, names) => {
+    const pixels = /^-?\d*\.?\d+px$/.test(part || '') ? parseFloat(part) : NaN;
+    if (!size || Number.isNaN(pixels)) return part;
+    const index = [0, size / 2, size].findIndex((edge) => Math.abs(pixels - edge) < 0.5);
+    return index < 0 ? part : names[index];
+  };
+  return [keyword(x, width, ['left', 'center', 'right']), keyword(y, height, ['top', 'center', 'bottom']), ...rest.filter((part) => parseFloat(part) !== 0)].join(' ');
 };
 const populateEditor = (element, mode) => {
   // On ::before or ::after the panel reads and edits the pseudo-element.
@@ -169,6 +181,11 @@ const populateEditor = (element, mode) => {
     }
     values[property] = sourceHintFor(element, property, pseudo)?.declaredValue || computed;
   });
+  // transform as written ("rotate(45deg)"), not the matrix it computes to;
+  // the pivot as keywords when it sits on an edge or the middle of the box.
+  values.transform = sourceHintFor(element, 'transform', pseudo)?.declaredValue || styles.transform;
+  values.transformOrigin = sourceHintFor(element, 'transform-origin', pseudo)?.declaredValue
+    || transformOriginKeywords(styles.transformOrigin, pseudo ? 0 : element.offsetWidth, pseudo ? 0 : element.offsetHeight);
   values.display = styles.display === 'inline-flex' ? 'flex' : styles.display === 'inline-grid' ? 'grid' : styles.display;
   // A pseudo-element's box sits in the element's own.
   const parentStyles = pseudo ? getComputedStyle(element) : element.parentElement ? getComputedStyle(element.parentElement) : null;

@@ -133,7 +133,11 @@ const storedChangeOrigins = new Set();
 // marked inactive: only what the panel shows goes to the agent.
 // Comments and edits belong to their site: Studio shows, counts and hands off
 // only those of the site open in the previews (other sites keep theirs).
-const isCurrentSite = (url) => commentOrigin(url) === commentOrigin(targetUrl);
+const isCurrentSite = (url) => {
+  const root = localSiteRoot();
+  if (!root) return commentOrigin(url) === commentOrigin(targetUrl);
+  return localFileFolder(url).startsWith(root);
+};
 const activeChanges = () => [...changeLog.values()].filter((change) => !change.inactive && isCurrentSite(change.url));
 const siteComments = () => comments.filter((comment) => isCurrentSite(comment.url));
 // Comments are numbered within their site, as the list and markers show them.
@@ -256,7 +260,7 @@ function viewportLabel(item, { workspace = true } = {}) {
 
 const MIN_VIEWPORT_WIDTH = 320;
 const MIN_VIEWPORT_HEIGHT = 320;
-const INSPECTOR_PROTOCOL_VERSION = 81;
+const INSPECTOR_PROTOCOL_VERSION = 82;
 
 // The Inspector's states.
 const INSPECTOR_STATE_LABELS = { default: 'Default', hover: 'Hover', focus: 'Focus', active: 'Pressed' };
@@ -392,6 +396,39 @@ function isLocalFileUrl(url) {
   } catch {
     return false;
   }
+}
+
+// Every local file shares the file:// origin, so a local project is told
+// apart by its folder: the folder of the page opened in Studio, widened when
+// the previews go up to a parent folder. Pages below it, in subfolders, stay
+// on the same site. Kept per Studio tab, so a reload on a subpage keeps it.
+const LOCAL_SITE_ROOT_KEY = 'pixelprism-local-site-root';
+let localSiteRootFolder = null;
+let localSiteRootTarget = '';
+
+function localFileFolder(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'file:') return '';
+    return `file://${parsed.host}${parsed.pathname.slice(0, parsed.pathname.lastIndexOf('/') + 1)}`;
+  } catch {
+    return '';
+  }
+}
+
+function localSiteRoot() {
+  const folder = localFileFolder(targetUrl);
+  if (!folder) return '';
+  if (localSiteRootTarget === targetUrl && localSiteRootFolder) return localSiteRootFolder;
+  if (localSiteRootFolder === null) {
+    try { localSiteRootFolder = sessionStorage.getItem(LOCAL_SITE_ROOT_KEY) || ''; } catch { localSiteRootFolder = ''; }
+  }
+  if (!localSiteRootFolder || !folder.startsWith(localSiteRootFolder)) {
+    localSiteRootFolder = folder;
+    try { sessionStorage.setItem(LOCAL_SITE_ROOT_KEY, folder); } catch { /* The root then lasts until Studio closes. */ }
+  }
+  localSiteRootTarget = targetUrl;
+  return localSiteRootFolder;
 }
 
 function showFileAccessNotice() {

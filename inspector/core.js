@@ -1,6 +1,6 @@
 // Talking to Studio, and finding an element again from what Studio stored about it.
 
-const INSPECTOR_PROTOCOL_VERSION = 81;
+const INSPECTOR_PROTOCOL_VERSION = 82;
 const extensionOrigin = new URL(chrome.runtime.getURL('/')).origin;
 const isStudioMessage = (event, type) => (
   event.source === window.parent
