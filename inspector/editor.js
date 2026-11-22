@@ -104,9 +104,16 @@ const transformOriginKeywords = (value, width, height) => {
   };
   return [keyword(x, width, ['left', 'center', 'right']), keyword(y, height, ['top', 'center', 'bottom']), ...rest.filter((part) => parseFloat(part) !== 0)].join(' ');
 };
+// ".button:hover" matches nothing the pointer isn't on; count the elements.
+// One element is named by its own tag, id and classes, not by its path.
+const editorTitleFor = (element, mode, sharedSelector, pseudo) => (
+  sharedSelector && selectorMatchesMultiple(sharedSelector === componentSelector ? baseComponentSelector : sharedSelector)
+    ? `${editorModeLabel[mode]} · all ${sharedSelector}`
+    : `${editorModeLabel[mode]} · ${selectorFor(element)}${PSEUDO_SUFFIX[pseudo] || ''}`
+);
 const populateEditor = (element, mode) => {
   // On ::before or ::after the panel reads and edits the pseudo-element.
-  const pseudo = mode === 'component' && element === selectedElement && !selectedTextNode ? inspectorPseudo : '';
+  const pseudo = mode === 'component' && element === selectedElement ? inspectorPseudo : '';
   const styles = getComputedStyle(element, PSEUDO_SUFFIX[pseudo] || null);
   editorMode = mode;
   const sharedSelector = mode === 'typography'
@@ -114,11 +121,7 @@ const populateEditor = (element, mode) => {
     : mode === 'component'
       ? componentSelector
       : layoutSelector;
-  // ".button:hover" matches nothing the pointer isn't on; count the elements.
-  // One element is named by its own tag, id and classes, not by its path.
-  const title = sharedSelector && selectorMatchesMultiple(sharedSelector === componentSelector ? baseComponentSelector : sharedSelector)
-    ? `${editorModeLabel[mode]} · all ${sharedSelector}`
-    : `${editorModeLabel[mode]} · ${selectorFor(element)}${PSEUDO_SUFFIX[pseudo] || ''}`;
+  const title = editorTitleFor(element, mode, sharedSelector, pseudo);
   const values = {};
   const valueSources = {};
   Object.keys(cssProperty).forEach((property) => { values[property] = Math.round(number(styles[property])); });
@@ -196,17 +199,12 @@ const populateEditor = (element, mode) => {
     // What a picture or video shows, for the Background section.
     media: pseudo ? null : mediaFor(element),
     // Its kind as Layers draws it, for the icon in the panel's header.
-    layerKind: selectedTextNode?.parentNode === element || isTextWrapper(element)
-      ? 'text'
-      : layerKindFor(element, !element.children.length && Boolean(layerTextFor(element))),
+    layerKind: layerKindFor(element, !element.children.length && Boolean(layerTextFor(element))),
     renderedWidth: Math.round(element.getBoundingClientRect().width),
     renderedHeight: Math.round(element.getBoundingClientRect().height),
     // Top-left corner on the page, so it doesn't change with scrolling.
     pageX: Math.round(element.getBoundingClientRect().left + window.scrollX),
-    pageY: Math.round(element.getBoundingClientRect().top + window.scrollY),
-    // Selected text inside this element: the values shown are the ones it
-    // takes from the element.
-    ...(selectedTextNode?.parentNode === element ? { textOf: layerNameFor(element) } : {})
+    pageY: Math.round(element.getBoundingClientRect().top + window.scrollY)
   };
   // Properties this session already overrides for the selector, so Studio
   // can mark the values the user changed.
@@ -221,12 +219,11 @@ const populateEditor = (element, mode) => {
     const pixels = /^(-?\d*\.?\d+)px$/.exec(value);
     values[property] = typeof values[property] === 'number' && pixels ? Number(pixels[1]) : value;
   });
-  // The parent's own edits are not the text's.
-  const changed = context.textOf ? [] : changedEntries.map(([property]) => property);
+  const changed = changedEntries.map(([property]) => property);
   // The states and pseudo-elements this element can be shown in, and the
   // ones already edited, alone or together (".link:hover::after").
   const states = mode === 'component' ? selectedStates : [];
-  const pseudos = mode === 'component' && !context.textOf ? selectedPseudos : [];
+  const pseudos = mode === 'component' ? selectedPseudos : [];
   const editedRules = new Set([...layoutRules.keys(), ...typographyRules.keys()]);
   const edited = (states, pseudos) => states.some((state) => pseudos.some((part) => editedRules.has(`${baseComponentSelector}${STATE_SUFFIX[state] || ''}${PSEUDO_SUFFIX[part] || ''}`)));
   const stateChanges = states.filter((state) => edited([state], ['', ...pseudos]));
@@ -297,14 +294,38 @@ const typographySelectorFor = (element) => {
   // written back to the source HTML when the user clicks Apply.
   return uniqueOrStructuralSelectorFor(element);
 };
+// Edits weigh what their selectors weigh, as they will in the source the
+// agent writes: an edit of h2 doesn't beat h2.minus. Each declaration is
+// its own rule, in edit order, so that between equal selectors the newer
+// edit wins. They sit in a layer whose !important beats the page's
+// unlayered !important ones.
+const overrideStamps = new Map();
+let overrideSequence = 0;
+const overrideStampKey = (selector, property) => `${selector}\u0000${property}`;
+// Brings a recorded edit back in its turn, so reloaded edits keep their order.
+const stampOverride = (selector, property, value) => {
+  overrideStamps.set(overrideStampKey(selector, property), { value, sequence: ++overrideSequence });
+};
 // An edit to a state also shows while the Inspector holds that state on.
-const overrideRulesText = (rules) => [...rules].map(([selector, declarations]) => `${[selector, ...forcedStateSelectors(selector)].join(',')}{${[...declarations].map(([property, value]) => `${property}:${value} !important`).join(';')}}`).join('\n');
-const renderTypographyRules = () => {
-  typographyStyle.textContent = overrideRulesText(typographyRules);
+const overrideRulesText = () => {
+  const declarations = [];
+  [typographyRules, layoutRules].forEach((rules) => rules.forEach((properties, selector) => properties.forEach((value, property) => {
+    const key = overrideStampKey(selector, property);
+    // A value set since the last render is the newest edit.
+    if (overrideStamps.get(key)?.value !== value) stampOverride(selector, property, value);
+    declarations.push({ selector, property, value, sequence: overrideStamps.get(key).sequence });
+  })));
+  const text = declarations.sort((left, right) => left.sequence - right.sequence).map(({ selector, property, value }) => (
+    `${[selector, ...forcedStateSelectors(selector)].join(',')}{${property}:${value} !important}`
+  )).join('\n');
+  return text ? `@layer viewport-parade-edits{\n${text}\n}` : '';
 };
-const renderLayoutRules = () => {
-  layoutStyle.textContent = overrideRulesText(layoutRules);
+const renderOverrideRules = () => {
+  typographyStyle.textContent = '';
+  layoutStyle.textContent = overrideRulesText();
 };
+const renderTypographyRules = renderOverrideRules;
+const renderLayoutRules = renderOverrideRules;
 // A :hover rule counts for an element the Inspector holds in Hover. With
 // pseudo ('before', 'after') only that pseudo-element's rules count.
 const matchingSelector = (element, selectorText, pseudo = '') => selectorText.split(',').map((selector) => selector.trim()).find((selector) => {
@@ -377,7 +398,9 @@ const containerRuleApplies = (element, conditionText) => {
       : inlineSize >= Number(value)
   ));
 };
-const activeRuleDeclarations = (element, property, pseudo = '') => {
+// The style rules of the page that match the element (its ::before or
+// ::after with pseudo), with their place in the cascade's source order.
+const matchedStyleRules = (element, pseudo = '') => {
   const matches = [];
   let order = 0;
   const visit = (rules, hrefOverride = null) => {
@@ -390,14 +413,7 @@ const activeRuleDeclarations = (element, property, pseudo = '') => {
       if (rule.type !== 1 && rule.cssRules?.length) return visit(rule.cssRules, hrefOverride);
       if (!rule.selectorText || !rule.style) return;
       const selector = matchingSelector(element, rule.selectorText, pseudo);
-      const declaredValue = rule.style.getPropertyValue(property).trim();
-      if (selector && declaredValue) matches.push({
-        selector,
-        declaredValue,
-        important: rule.style.getPropertyPriority(property) === 'important',
-        order,
-        href: rule.parentStyleSheet?.href || hrefOverride
-      });
+      if (selector) matches.push({ selector, style: rule.style, order, href: rule.parentStyleSheet?.href || hrefOverride });
       order += 1;
     });
   };
@@ -410,6 +426,14 @@ const activeRuleDeclarations = (element, property, pseudo = '') => {
   authoredStylesheets.forEach(({ href, sheet }) => visit(sheet.cssRules, href));
   return matches;
 };
+const declarationsIn = (rules, property) => rules.map(({ selector, style, order, href }) => ({
+  selector,
+  declaredValue: style.getPropertyValue(property).trim(),
+  important: style.getPropertyPriority(property) === 'important',
+  order,
+  href
+})).filter((match) => match.declaredValue);
+const activeRuleDeclarations = (element, property, pseudo = '') => declarationsIn(matchedStyleRules(element, pseudo), property);
 // The declaration the browser applies: !important first, then the more
 // specific selector, then the later rule. Layers and scoping are ignored.
 const selectorSpecificity = (selector) => {
@@ -460,6 +484,8 @@ const declarationForCustomProperty = (element, variable, pseudo = '') => {
   }
   return null;
 };
+// The properties a hint looks for in the parent when the element sets none.
+const INHERITED_PROPERTIES = new Set(['color', 'font-family', 'font-size', 'font-weight', 'font-style', 'font-stretch', 'line-height', 'letter-spacing', 'word-spacing', 'text-transform', 'text-align']);
 // pseudo: the hint for the element's ::before or ::after, which inherits
 // from the element itself.
 const sourceHintFor = (element, property, pseudo = '') => {
@@ -469,8 +495,7 @@ const sourceHintFor = (element, property, pseudo = '') => {
   if (!declaration) {
     declaration = authoredValueFor(element, property, pseudo);
   }
-  const inheritedProperties = new Set(['color', 'font-family', 'font-size', 'font-weight', 'font-style', 'font-stretch', 'line-height', 'letter-spacing', 'word-spacing', 'text-transform', 'text-align']);
-  const inherited = !declaration && inheritedProperties.has(property);
+  const inherited = !declaration && INHERITED_PROPERTIES.has(property);
   const parent = pseudo ? element : element.parentElement;
   if (inherited && parent) {
     const parentInlineValue = parent.style?.getPropertyValue(property).trim();
@@ -589,17 +614,18 @@ const applyComponent = (input) => {
   const from = inputPreviousValue(input);
   const value = input.value.trim();
   const sourceHint = sourceHintFor(selectedElement, css, inspectorPseudo);
+  const selector = componentSelector;
   const componentValue = typographyDefinition
     ? cssValueForInput(input.dataset.property, value, typographyDefinition.unit)
     : cssValueForInput(input.dataset.property, value);
-  const declarations = layoutRules.get(componentSelector) || new Map();
+  const declarations = layoutRules.get(selector) || new Map();
   if (componentValue === '') declarations.delete(css);
   else declarations.set(css, componentValue);
-  if (declarations.size) layoutRules.set(componentSelector, declarations);
-  else layoutRules.delete(componentSelector);
+  if (declarations.size) layoutRules.set(selector, declarations);
+  else layoutRules.delete(selector);
   renderLayoutRules();
   const fromValue = cssValueForInput(input.dataset.property, from, typographyDefinition?.unit ?? 'px');
-  reportStyleChange({ selector: componentSelector, property: css, from: fromValue, to: componentValue, sourceHint });
+  reportStyleChange({ selector, property: css, from: fromValue, to: componentValue, sourceHint });
   rememberInputValue(input);
 };
 const editorModeAtPoint = (element, clientX, clientY) => {
@@ -633,26 +659,6 @@ const editorModeAtPoint = (element, clientX, clientY) => {
   if (within(...marginBox)) return 'margin';
   return 'size';
 };
-// Selected or hovered text: one box around the text itself.
-const showTextNode = (node) => {
-  const range = document.createRange();
-  range.selectNodeContents(node);
-  const box = range.getBoundingClientRect();
-  [marginOverlay, paddingOverlay].forEach((overlay) => {
-    overlay.style.border = 'none';
-    overlay.style.background = 'transparent';
-  });
-  contentOverlay.style.border = '2px solid #2563eb';
-  contentOverlay.style.background = 'rgba(37,99,235,.2)';
-  [marginOverlay, paddingOverlay, contentOverlay].forEach((overlay) => setRect(overlay, box.left, box.top, box.width, box.height));
-  hideSpacing();
-  gutterLayer.replaceChildren();
-  label.textContent = `text in ${selectorFor(node.parentElement)}  ${Math.round(box.width)} × ${Math.round(box.height)} px  ·  ${Math.round(box.left)}, ${Math.round(box.top)}`;
-  const labelLeft = Math.max(8, Math.min(window.innerWidth - label.offsetWidth - 8, box.left));
-  const labelTop = box.top - label.offsetHeight - 6 >= 8 ? box.top - label.offsetHeight - 6 : box.bottom + 6;
-  label.style.left = `${labelLeft - box.left}px`;
-  label.style.top = `${labelTop - box.top}px`;
-};
 const show = (element, zone = highlightedZone) => {
   if (!element || [marginOverlay, paddingOverlay, contentOverlay].some((overlay) => overlay === element || overlay.contains(element))) return;
   // Text being edited is drawn as a field instead (text-edit.js).
@@ -660,8 +666,11 @@ const show = (element, zone = highlightedZone) => {
     showTextEditField(element);
     return;
   }
-  if (element === selectedElement && selectedTextNode?.parentNode === element) {
-    showTextNode(selectedTextNode);
+  // A comment's area is drawn instead of its anchor's box (picking.js).
+  if (commentArea && commentArea.anchor === element && element === selectedElement) {
+    [marginOverlay, paddingOverlay, contentOverlay, ...marginStrips, ...paddingStrips, spacingEdge, label].forEach((overlay) => { overlay.style.display = 'none'; });
+    hideSpacing();
+    placeCommentArea();
     return;
   }
   const box = element.getBoundingClientRect();
@@ -670,79 +679,27 @@ const show = (element, zone = highlightedZone) => {
   const padding = ['paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft'].map((property) => number(styles[property]));
   const border = ['borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth'].map((property) => number(styles[property]));
   highlightedZone = zone;
-  // The margin and padding zones colour only the spacing itself, with the
-  // blue size highlight's recipe (20% fill, 2px edge at full strength), on
-  // top of a grey outline of the element the spacing belongs to.
-  const elementEdge = '1px solid rgba(113,113,122,.9)';
-  // The gap zone works the same way, for the whole gap or one axis of it.
-  const gapAxis = { gap: 'both', rowGap: 'row', columnGap: 'column' }[zone];
-  if (gapAxis) {
-    marginOverlay.style.border = 'none';
-    marginOverlay.style.background = 'transparent';
-    paddingOverlay.style.border = elementEdge;
-    paddingOverlay.style.background = 'transparent';
-    contentOverlay.style.border = 'none';
-    contentOverlay.style.background = 'transparent';
-  } else if (zone === 'margin') {
-    marginOverlay.style.border = 'none';
-    marginOverlay.style.background = 'transparent';
-    paddingOverlay.style.border = elementEdge;
-    paddingOverlay.style.background = 'transparent';
-    contentOverlay.style.border = 'none';
-    contentOverlay.style.background = 'transparent';
-  } else if (zone === 'padding') {
-    marginOverlay.style.border = 'none';
-    marginOverlay.style.background = 'transparent';
-    paddingOverlay.style.border = elementEdge;
-    paddingOverlay.style.background = 'transparent';
-    contentOverlay.style.border = 'none';
-    contentOverlay.style.background = 'transparent';
-  } else {
-    marginOverlay.style.border = '1px solid rgba(82,82,91,.7)';
-    marginOverlay.style.background = 'rgba(82,82,91,.05)';
-    paddingOverlay.style.border = '1px solid rgba(113,113,122,.7)';
-    paddingOverlay.style.background = 'rgba(113,113,122,.07)';
-    contentOverlay.style.border = zone === 'size' ? '2px solid #2563eb' : '1px solid rgba(161,161,170,.75)';
-    contentOverlay.style.background = zone === 'size' ? 'rgba(37,99,235,.2)' : 'rgba(161,161,170,.08)';
-  }
+  // Keep the content visible; only spacing bands receive a fill.
+  marginOverlay.style.border = 'none';
+  marginOverlay.style.background = 'transparent';
+  paddingOverlay.style.border = `2px ${element === selectedElement ? 'dashed' : 'solid'} #2563eb`;
+  paddingOverlay.style.background = 'transparent';
+  contentOverlay.style.display = 'none';
   setRect(marginOverlay, box.left - margin[3], box.top - margin[0], box.width + margin[1] + margin[3], box.height + margin[0] + margin[2]);
-  setRect(paddingOverlay, box.left + border[3], box.top + border[0], box.width - border[1] - border[3], box.height - border[0] - border[2]);
-  setRect(contentOverlay, box.left + border[3] + padding[3], box.top + border[0] + padding[0], box.width - border[1] - border[3] - padding[1] - padding[3], box.height - border[0] - border[2] - padding[0] - padding[2]);
+  setRect(paddingOverlay, box.left, box.top, box.width, box.height);
   const borderBox = [box.left, box.top, box.right, box.bottom];
   const paddingBox = [box.left + border[3], box.top + border[0], box.right - border[1], box.bottom - border[2]];
   const contentBox = [paddingBox[0] + padding[3], paddingBox[1] + padding[0], paddingBox[2] - padding[1], paddingBox[3] - padding[2]];
   const marginBox = [box.left - margin[3], box.top - margin[0], box.right + margin[1], box.bottom + margin[2]];
   hideSpacing();
-  if (zone === 'margin') drawStrips(marginStrips, marginBox, borderBox, 'rgba(249,115,22,.2)', '#f97316');
-  if (zone === 'padding') drawStrips(paddingStrips, paddingBox, contentBox, 'rgba(34,197,94,.2)', '#22c55e');
-  // Equal sides collapse to one value ("margin: 0", "gap: 24 px"); any
-  // difference spells every side out.
-  const sides = (values, separator) => values.every((value) => value === values[0])
-    ? (values[0] ? `${values[0]} px` : '0')
-    : `${values.join(separator)} px`;
-  const gapPx = (value) => Math.round(parseFloat(value) || 0);
-  const gap = styles.display.includes('flex') || styles.display.includes('grid')
-    ? `\ngap: ${sides([gapPx(styles.rowGap), gapPx(styles.columnGap)], ' × ')}`
-    : '';
-  drawGutters(element, styles, gapAxis);
-  label.textContent = `${selectorFor(element)}  ${Math.round(box.width)} × ${Math.round(box.height)} px\nmargin: ${sides(margin, ' / ')}   padding: ${sides(padding, ' / ')}${gap}`;
-  // The label sits above the element, or below it when there is no room
-  // above, measured at its real size so it never covers the element. Only
-  // an element taller than the preview leaves no room, and then the label
-  // goes to the preview's top edge.
-  const marginLeft = box.left - margin[3];
-  const marginTop = box.top - margin[0];
-  const marginBottom = marginTop + box.height + margin[0] + margin[2];
-  const labelWidth = label.offsetWidth;
-  const labelHeight = label.offsetHeight;
-  const labelLeft = Math.max(8, Math.min(window.innerWidth - labelWidth - 8, marginLeft));
-  const labelTop = marginTop - labelHeight - 6 >= 8
-    ? marginTop - labelHeight - 6
-    : marginBottom + 6 + labelHeight <= window.innerHeight - 8
-      ? marginBottom + 6
-      : 8;
-  label.style.left = `${labelLeft - marginLeft}px`;
-  label.style.top = `${labelTop - marginTop}px`;
+  if (!capturePickerActive) {
+    drawStrips(marginStrips, marginBox, borderBox, 'rgba(249,115,22,.2)', '#f97316');
+    drawStrips(paddingStrips, paddingBox, contentBox, 'rgba(34,197,94,.2)', '#22c55e');
+    drawGutters(element, styles, { gap: 'both', rowGap: 'row', columnGap: 'column' }[zone]);
+  } else {
+    gutterLayer.replaceChildren();
+  }
+  showElementLabel(element, styles, box);
 };
 
 // revert: the panel's reset, for values an empty field can't undo (alt).
@@ -752,7 +709,6 @@ const applyEditorValue = (propertyName, rawValue, previousValue, revert) => {
     applyAltEdit(rawValue, revert);
     return;
   }
-  if (selectedTextNode) adoptTextWrapper();
   const input = { dataset: { property: propertyName, viewportParadePreviousValue: previousValue }, value: rawValue };
   if (editorMode === 'typography' && typographyProperty[input.dataset.property]) {
     applyTypography(input);

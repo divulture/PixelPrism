@@ -18,6 +18,7 @@ const applyRecordedChanges = (changes) => {
     const declarations = layoutRules.get(selector) || new Map();
     declarations.set(property, String(value));
     layoutRules.set(selector, declarations);
+    stampOverride(selector, property, String(value));
   });
   renderLayoutRules();
   scheduleLayoutMap();
@@ -102,6 +103,7 @@ const installCommands = () => {
     componentSelector = editedComponentSelector();
     populateEditor(selectedElement, 'component');
     show(selectedElement);
+    postLayersSelected();
   });
   window.addEventListener('message', (event) => {
     if (['code-hover', 'code-select', 'code-match-selectors'].some((type) => isStudioMessage(event, type))) handleCodeMessage(event.data);
@@ -137,16 +139,18 @@ const installCommands = () => {
   });
   window.addEventListener('message', (event) => {
     if (!isStudioMessage(event, 'layers-select')) return;
-    const element = layerElementFor(event.data.path);
-    const node = Number.isInteger(event.data.textIndex) ? element?.childNodes[event.data.textIndex] : null;
-    selectLayerElement(element, { exact: true, textNode: node?.nodeType === Node.TEXT_NODE ? node : null });
+    const { pseudo } = event.data;
+    selectLayerElement(layerElementFor(event.data.path), { exact: true, pseudo: typeof pseudo === 'string' ? pseudo : undefined });
+  });
+  window.addEventListener('message', (event) => {
+    if (!isStudioMessage(event, 'layers-set-hidden')) return;
+    const { path, pseudo, hidden } = event.data;
+    setLayerHidden(path, typeof pseudo === 'string' ? pseudo : '', hidden === true);
   });
   window.addEventListener('message', (event) => {
     if (!isStudioMessage(event, 'layers-hover')) return;
     const element = layerElementFor(event.data.path);
-    const node = Number.isInteger(event.data.textIndex) ? element?.childNodes[event.data.textIndex] : null;
-    if (node?.nodeType === Node.TEXT_NODE) showTextNode(node);
-    else if (element) show(element, 'size');
+    if (element) show(element, 'size');
     else if (selectedElement) show(selectedElement, 'size');
     else hideOverlays();
   });

@@ -1,0 +1,70 @@
+@font-face { font-family: "Inter"; font-style: normal; font-weight: 400; src: url("fonts/inter-400.ttf") format("truetype"); }
+@font-face { font-family: "Inter"; font-style: normal; font-weight: 500; src: url("fonts/inter-500.ttf") format("truetype"); }
+@font-face { font-family: "Inter"; font-style: normal; font-weight: 600; src: url("fonts/inter-600.ttf") format("truetype"); }
+
+/* The colours of Studio's light and dark themes (studio.css). */
+:root {
+  color-scheme: light dark;
+  --ink: #18181b;
+  --muted: #71717a;
+  --canvas: #ffffff;
+  --box: #f3f3f4;
+  --box-hover: #eeeeef;
+  --accent: #2563eb;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e4e4e7;
+    --muted: #a1a1aa;
+    --canvas: #18181b;
+    --box: #27272a;
+    --box-hover: #3f3f46;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--ink);
+  font: 400 14px/20px Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+main { max-width: 520px; padding: 32px 24px; }
+
+h1 { margin: 0 0 4px; font-size: 16px; line-height: 24px; font-weight: 600; }
+
+.note { margin: 0 0 16px; color: var(--muted); font-size: 12px; line-height: 16px; }
+fieldset + .note { margin: 16px 0 0; }
+
+fieldset { display: grid; gap: 12px; margin: 0; padding: 0; border: 0; }
+
+label { display: flex; align-items: center; gap: 10px; font-weight: 500; cursor: pointer; }
+
+input[type="checkbox"] {
+  appearance: none;
+  flex: none;
+  inline-size: 16px;
+  block-size: 16px;
+  margin: 0;
+  border-radius: 4px;
+  background: var(--box) center / 12px no-repeat;
+  cursor: pointer;
+}
+input[type="checkbox"]:hover { background-color: var(--box-hover); }
+input[type="checkbox"]:checked {
+  background-color: var(--accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.5l4.5-5' fill='none' stroke='white' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

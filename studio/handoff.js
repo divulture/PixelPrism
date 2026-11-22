@@ -58,9 +58,12 @@ function formatChangeReport() {
         bySelector.set(change.selector, properties);
       });
       [...bySelector.entries()].sort(([left], [right]) => left.localeCompare(right)).forEach(([selector, properties]) => {
+        // Text beside other children: a text change replaces it where it
+        // stands; styles on it (recorded by earlier versions) need a span.
         const wrap = properties[0]?.wrapText;
+        const textOnly = properties.every((change) => change.property === 'text');
         lines.push('', wrap
-          ? `- text “${wrap.text}” in \`${escapeInlineCode(wrap.parent || '')}\`: wrap it in a span and style the span`
+          ? `- text “${wrap.text}” in \`${escapeInlineCode(wrap.parent || '')}\`: ${textOnly ? 'change this text where it stands, without adding an element' : 'wrap it in a span and style the span'}`
           : `- \`${escapeInlineCode(selector)}\`${[INSPECTOR_STATE_LABELS[changeState(properties[0])], INSPECTOR_PSEUDO_SUFFIXES[changePseudo(properties[0])]].filter(Boolean).map((label) => ` · ${label}`).join('')}`);
         properties.forEach((change) => {
           const from = change.from || 'removed';
@@ -81,7 +84,8 @@ function formatChangeReport() {
       const target = comment.element?.selector ? ` · \`${escapeInlineCode(comment.element.selector)}\`` : ' · page-level';
       const rect = comment.pin ? { x: comment.pin.x, y: comment.pin.y } : comment.element?.rect;
       const position = rect ? ` · at ${rect.x}, ${rect.y}${Number.isFinite(rect.width) ? `, ${rect.width} × ${rect.height}` : ''}` : '';
-      lines.push(`- ${comment.comment} (${viewportLabel(comment, { workspace: false })}${target}${position})`);
+      const area = comment.area ? ` · area ${comment.area.width} × ${comment.area.height}${comment.elements?.length ? ` around ${comment.elements.map((element) => `\`${escapeInlineCode(element.selector || element.tag || '')}\``).join(', ')}` : ''}` : '';
+      lines.push(`- ${comment.comment} (${viewportLabel(comment, { workspace: false })}${target}${position}${area})`);
     });
   }
   return `${lines.join('\n')}\n`;
@@ -93,10 +97,33 @@ function reportFilename() {
   return `pixelprism-changes-${now.getFullYear()}-${part(now.getMonth() + 1)}-${part(now.getDate())}-${part(now.getHours())}${part(now.getMinutes())}.md`;
 }
 
-const CODEX_INSTRUCTION = [
-  'Apply the visual changes from PixelPrism to the current source repository. PixelPrism values are visual targets, not instructions to hardcode pixels, colors, or font sizes. For every changed property: (1) locate the rendered element using route, DOM context, text, attributes, selector, surrounding markup, and parent context; (2) trace the current rendered value to its declaration and abstraction chain before editing: CSS custom property, design token/theme, parent/theme variable scope, Tailwind utility/config, preprocessor variable, mixin/helper, component prop, variant/state, shared component style, then local CSS/inline style only when truly local; (3) determine whether intent is global, component, variant, instance, or viewport/breakpoint, including responsive utilities, media/container queries, and responsive props; (4) reuse an existing appropriate token, utility, prop, variant, or scoped variable. Never replace an existing CSS variable, design token, theme value, component prop, Tailwind utility, or shared abstraction with a hardcoded value without evidence it is local. Before changing a token, inspect its usages: change it only for demonstrated global intent; otherwise use the narrowest existing abstraction. Do not create a token for a one-off unless it is semantically reusable and consistent with project conventions. sourceHint is optional browser evidence, not authoritative; verify it in source. A group with state (hover, focus or active) applies only while the element is in that state: put its changes in the element’s state styles (its :hover, :focus-visible or :active rule, a hover:/focus:/active: utility, or the component’s state variant), never in the default styles; ruleSelector is the rule PixelPrism previewed them in. A group with pseudoElement (::before or ::after) styles that pseudo-element of the element, not the element itself: put its changes in the element’s ::before or ::after styles (its ::before or ::after rule, a before:/after: utility, or the component’s pseudo-element style), after the state when the group has one too (.link:hover::after, hover:after:), never on the element; ruleSelector is the rule PixelPrism previewed them in. A sourceHint with property names the property that declares the value under another name: a size declared by its logical name (inline-size for width, min-block-size for min-height in horizontal writing); change that declaration and keep its logical name, instead of adding the physical property beside it. A change with newDeclaration: true has no declaration of that property, or of its logical name, for this element in the project CSS: add one in the narrowest place that styles the element (its component, class, or utility) instead of searching for a rule to edit; its before value is the browser default, or the HTML attribute in htmlAttribute. htmlAttribute { name, value } means the size came from that HTML attribute of the element (width or height of an img, video, canvas, svg or iframe) and no CSS sets it: change the attribute where the source sets it (markup or component prop), or add the declaration when the project sizes such elements in CSS. An element with wrapText does not exist in the source: it is text that sits directly inside the element at wrapText.parentSelector, beside other children. Wrap exactly that text (wrapText.text) in a span there, give it a class that fits the project’s naming, and apply the changes to that span; the selector PixelPrism used for it is temporary. Preserve the project’s styling architecture (Tailwind, CSS Modules, SCSS, styled-components, CSS variables, themes, or design system) and make the smallest source-level change. Apply only final beforeComputed/afterComputed values. Do not add generated CSS overrides, framework adapters, MCP, AST infrastructure, or unrelated refactors; report genuinely ambiguous matches rather than guessing.',
-  'A change with property text replaces the element’s visible text: change the text where the source defines it (markup, component, content or translation file), not with CSS; before is the old text. A change with property alt sets an image’s alt attribute: change it where the source defines it (markup, component prop, content or translation file); before is the old alt text; beforeMissing: true means the image had no alt attribute; an empty after marks the image as decorative (alt="").',
-].join(' ');
+// What the agent is told: only the paragraphs about what this handoff
+// carries, so a handoff of two comments does not come with pages about
+// tokens, link previews and the audit. Each part is [when, text]; a part
+// without when always goes.
+const CODEX_INSTRUCTION_PARTS = (() => {
+  const groups = (handoff) => handoff.changeSet;
+  const changes = (handoff) => handoff.changeSet.flatMap((group) => group.changes);
+  const styled = (handoff) => changes(handoff).some((change) => !['text', 'alt', 'class'].includes(change.property))
+    || Boolean(handoff.tokens || handoff.unlinkedValues);
+  return [
+    [null, 'Apply the visual changes from PixelPrism to the current source repository.'],
+    [styled, 'PixelPrism values are visual targets, not instructions to hardcode pixels, colors, or font sizes. For every changed property: (1) locate the rendered element using route, DOM context, text, attributes, selector, surrounding markup, and parent context; (2) trace the current rendered value to its declaration and abstraction chain before editing: CSS custom property, design token/theme, parent/theme variable scope, Tailwind utility/config, preprocessor variable, mixin/helper, component prop, variant/state, shared component style, then local CSS/inline style only when truly local; (3) determine whether intent is global, component, variant, instance, or viewport/breakpoint, including responsive utilities, media/container queries, and responsive props; (4) reuse an existing appropriate token, utility, prop, variant, or scoped variable. Never replace an existing CSS variable, design token, theme value, component prop, Tailwind utility, or shared abstraction with a hardcoded value without evidence it is local. Before changing a token, inspect its usages: change it only for demonstrated global intent; otherwise use the narrowest existing abstraction. Do not create a token for a one-off unless it is semantically reusable and consistent with project conventions. sourceHint is optional browser evidence, not authoritative; verify it in source.'],
+    [(h) => groups(h).some((group) => group.state), 'A group with state (hover, focus or active) applies only while the element is in that state: put its changes in the element’s state styles (its :hover, :focus-visible or :active rule, a hover:/focus:/active: utility, or the component’s state variant), never in the default styles; ruleSelector is the rule PixelPrism previewed them in.'],
+    [(h) => groups(h).some((group) => group.pseudoElement), 'A group with pseudoElement (::before or ::after) styles that pseudo-element of the element, not the element itself: put its changes in the element’s ::before or ::after styles (its ::before or ::after rule, a before:/after: utility, or the component’s pseudo-element style), after the state when the group has one too (.link:hover::after, hover:after:), never on the element; ruleSelector is the rule PixelPrism previewed them in.'],
+    [(h) => changes(h).some((change) => change.sourceHint?.property), 'A sourceHint with property names the property that declares the value under another name: a size declared by its logical name (inline-size for width, min-block-size for min-height in horizontal writing); change that declaration and keep its logical name, instead of adding the physical property beside it.'],
+    [(h) => changes(h).some((change) => change.newDeclaration), 'A change with newDeclaration: true has no declaration of that property, or of its logical name, for this element in the project CSS: add one in the narrowest place that styles the element (its component, class, or utility) instead of searching for a rule to edit; its before value is the browser default, or the HTML attribute in htmlAttribute.'],
+    [(h) => changes(h).some((change) => change.htmlAttribute), 'htmlAttribute { name, value } means the size came from that HTML attribute of the element (width or height of an img, video, canvas, svg or iframe) and no CSS sets it: change the attribute where the source sets it (markup or component prop), or add the declaration when the project sizes such elements in CSS.'],
+    [(h) => groups(h).some((group) => group.wrapText), 'An element with wrapText does not exist in the source: it is text that sits directly inside the element at wrapText.parentSelector, beside other children, and the selector PixelPrism used for it is temporary. A text change on it replaces exactly that text (wrapText.text) where it stands, without adding an element. Any other change on it styles only that text: wrap it in a span there, give the span a class that fits the project’s naming, and apply the changes to that span.'],
+    [styled, 'Preserve the project’s styling architecture (Tailwind, CSS Modules, SCSS, styled-components, CSS variables, themes, or design system) and make the smallest source-level change. Apply only final beforeComputed/afterComputed values. Do not add generated CSS overrides, framework adapters, MCP, AST infrastructure, or unrelated refactors; report genuinely ambiguous matches rather than guessing.'],
+    [(h) => changes(h).some((change) => change.property === 'text'), 'A change with property text replaces the element’s visible text: change the text where the source defines it (markup, component, content or translation file), not with CSS; before is the old text.'],
+    [(h) => changes(h).some((change) => change.property === 'alt'), 'A change with property alt sets an image’s alt attribute: change it where the source defines it (markup, component prop, content or translation file); before is the old alt text; beforeMissing: true means the image had no alt attribute; an empty after marks the image as decorative (alt="").'],
+    [(h) => h.comments.length > 0, 'comments lists notes the user left on the page, each on an element (located like a change: route, domPath, selector, classes, parent) at a viewport: do in the source what each asks, where that element is rendered; a note describes intent, not exact values, so follow the project’s existing components and tokens.'],
+    [(h) => h.comments.some((comment) => comment.area), 'A comment with area was left on a region the user framed on the page, not on one element: element is the closest element holding the whole region, area is the region’s box inside it (x and y from the element’s top left corner, width and height, in CSS pixels at that viewport), and elements lists the elements inside the region (each located like element; none when the region covers part of one element). The note is about that group as a whole: do what it asks for those elements together, where they are rendered.']
+  ];
+})();
+
+const codexInstruction = (handoff) => CODEX_INSTRUCTION_PARTS.filter(([when]) => !when || when(handoff)).map(([, text]) => text).join(' ');
 
 function codexChangeSet() {
   const groups = new Map();
@@ -144,7 +171,7 @@ function codexChangeSet() {
       ...(change.sourceHint ? { sourceHint: change.sourceHint } : {}),
       ...(change.newDeclaration ? { newDeclaration: true } : {}),
       ...(change.htmlAttribute ? { htmlAttribute: change.htmlAttribute } : {}),
-      ...(change.fromMissing ? { beforeMissing: true } : {})
+      ...(change.fromMissing ? { beforeMissing: true } : {}),
     });
   });
   groups.forEach((group) => { group.changes = collapseShorthandChanges(group.changes); });
@@ -190,13 +217,15 @@ function collapseShorthandChanges(changes) {
 }
 
 function codexHandoff() {
-  return {
+  const handoff = {
     source: 'PixelPrism',
     version: 2,
-    instruction: CODEX_INSTRUCTION,
+    instruction: '',
     changeSet: codexChangeSet(),
     comments: agentComments()
   };
+  handoff.instruction = codexInstruction(handoff);
+  return handoff;
 }
 
 // Edits, token changes or comments with text: what an agent can act on. The

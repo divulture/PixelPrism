@@ -280,10 +280,23 @@ const positionCommentMarkers = () => {
   const selected = markerDrag ? null : commentMarkers.find((marker) => marker.id === selectedCommentId && ((marker.target && marker.state === 'placed') || marker.state === 'approx'));
   if (selected) {
     // A recorded position is outlined dashed: it is where the element was.
-    showCommentTargetBox(selected.state === 'approx' ? markerRectFor(selected) : selected.target.getBoundingClientRect(), selected.state === 'approx');
+    showCommentTargetBox(markerAreaRect(selected, selected.state === 'approx' ? markerRectFor(selected) : selected.target.getBoundingClientRect()), selected.state === 'approx');
   } else if (!markerDrag) {
     commentTargetBox.style.display = 'none';
   }
+};
+// A comment on an area outlines that area, kept within its element as the
+// element may be narrower at another width.
+const markerAreaRect = (marker, rect) => {
+  if (!marker.area) return rect;
+  const left = Math.min(Math.max(marker.area.x, 0), rect.width);
+  const top = Math.min(Math.max(marker.area.y, 0), rect.height);
+  return {
+    left: rect.left + left,
+    top: rect.top + top,
+    width: Math.max(0, Math.min(marker.area.width, rect.width - left)),
+    height: Math.max(0, Math.min(marker.area.height, rect.height - top))
+  };
 };
 const scheduleMarkerPosition = () => {
   if (!commentMarkersEnabled || markerPositionFrame) return;
@@ -324,7 +337,8 @@ const applyCommentMarkers = (data) => {
     const pin = item.pin && Number.isFinite(item.pin.x) && Number.isFinite(item.pin.y) ? { x: item.pin.x, y: item.pin.y } : null;
     const offset = item.offset && Number.isFinite(item.offset.x) && Number.isFinite(item.offset.y) ? { x: item.offset.x, y: item.offset.y } : null;
     const steps = Array.isArray(item.steps) ? item.steps : [];
-    return { id: item.id, number: item.number, element: item.element || null, selector: item.selector || '', pin, offset, steps, node, target: null, state: 'missing' };
+    const area = !pin && item.area && ['x', 'y', 'width', 'height'].every((key) => Number.isFinite(item.area[key])) ? item.area : null;
+    return { id: item.id, number: item.number, element: item.element || null, selector: item.selector || '', pin, offset, area, steps, node, target: null, state: 'missing' };
   });
   resolveCommentMarkers();
   // Layout can shift without a scroll or DOM change (fonts, animations).

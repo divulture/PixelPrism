@@ -1355,9 +1355,9 @@ function altInputField(media) {
 
 // Picture settings in Background, each where it works: object-fit and
 // object-position for an img or video (position not while it fills the box),
-// and size, position and repeat for a background image. A field under a
-// label names each picture (an img's with its own size); an img also gets its
-// alt text.
+// then the background's layers (backgroundLayersFields). A field under a
+// label names an img or video with its own size; an img also gets its alt
+// text.
 function imageSettingsFields(values, context) {
   const fields = [];
   const fileName = (url) => {
@@ -1400,40 +1400,429 @@ function imageSettingsFields(values, context) {
     relevance();
     fields.push(fit, position);
   }
-  const backgroundImage = String(values?.backgroundImage || 'none');
-  if (backgroundImage !== 'none') {
-    const describe = (layer) => {
-      const url = /^url\(\s*["']?(.*?)["']?\s*\)$/.exec(layer)?.[1];
-      return url ? fileName(url) : layer.split('(')[0];
-    };
-    fields.push(pictureListField('Background image', cssLayers(backgroundImage).map((layer) => ({ label: describe(layer), title: layer }))));
-  }
-  if (backgroundImage !== 'none') {
-    fields.push(menuSelectField('backgroundSize', 'Size', [
-      ['auto', 'Auto', 'Keep the image at its own size'],
-      ['cover', 'Cover', 'Fill the element and crop what does not fit'],
-      ['contain', 'Contain', 'Fit the whole image inside the element']
-    ], String(values?.backgroundSize || 'auto')));
-    fields.push(positionMatrixField('backgroundPosition', String(values?.backgroundPosition || '0% 0%'), 'image'));
-    const repeatRow = document.createElement('div');
-    repeatRow.className = 'inspector-field is-wide is-tabs';
-    const repeat = hiddenInspectorInput('backgroundRepeat', String(values?.backgroundRepeat || 'repeat'));
-    const { tabs, press } = childTabs('Repeat', [
-      { key: 'repeat', text: 'Repeat', title: 'Tile in both directions' },
-      { key: 'repeat-x', text: 'X', title: 'Tile across only' },
-      { key: 'repeat-y', text: 'Y', title: 'Tile down only' },
-      { key: 'no-repeat', text: 'None', title: 'Show the image once' }
-    ], (key) => {
-      setInputValue(repeat, key);
-      press(key);
-    });
-    repeatRow.classList.add('inspector-syncs');
-    repeatRow.refreshFromPanel = () => press(repeat.value);
-    press(repeat.value);
-    repeatRow.append(tabs, repeat);
-    fields.push(repeatRow);
-  }
+  fields.push(...backgroundLayersFields(values));
   return fields;
+}
+
+// Background layers. background-image is a list of layers, the first painted
+// on top; background-size, -position and -repeat are lists that pair with it
+// entry by entry (a shorter list repeats). A layer is a gradient, a url()
+// image, none (an image with no address yet) or anything else, kept as
+// written.
+const GRADIENT_KINDS = ['linear', 'radial', 'conic'];
+const BACKGROUND_LAYER_PARTS = [
+  ['backgroundSize', 'auto'],
+  ['backgroundPosition', '0% 0%'],
+  ['backgroundRepeat', 'repeat']
+];
+
+// Splits text at top-level spaces, keeping functions whole.
+function cssWords(text) {
+  const words = [];
+  let depth = 0;
+  let word = '';
+  [...String(text)].forEach((char) => {
+    if (char === '(') depth += 1;
+    else if (char === ')') depth -= 1;
+    if (/\s/.test(char) && depth === 0) {
+      if (word) words.push(word);
+      word = '';
+    } else word += char;
+  });
+  if (word) words.push(word);
+  return words;
+}
+
+const isCssColor = (word) => !/^[-+.\d]/.test(word) && CSS.supports('color', word);
+
+function parseBackgroundLayer(text) {
+  const layer = String(text).trim();
+  if (layer === 'none') return { kind: 'image', url: '' };
+  const url = /^url\(\s*(["']?)(.*)\1\s*\)$/s.exec(layer);
+  if (url) return { kind: 'image', url: url[2] };
+  const gradient = /^(repeating-)?(linear|radial|conic)-gradient\((.*)\)$/s.exec(layer);
+  if (!gradient) return { kind: 'other', text: layer };
+  const args = cssLayers(gradient[3]);
+  // The first argument sets the direction or shape unless it names a color.
+  const prelude = args.length && !cssWords(args[0]).some(isCssColor) ? args.shift() : '';
+  return {
+    kind: 'gradient',
+    type: gradient[2],
+    repeating: Boolean(gradient[1]),
+    prelude,
+    stops: args.map((stop) => {
+      const words = cssWords(stop);
+      const color = words.find(isCssColor) || '';
+      return { color, position: words.filter((word) => word !== color).join(' ') };
+    })
+  };
+}
+
+function composeBackgroundLayer(layer) {
+  if (layer.kind === 'image') return layer.url.trim() ? `url("${layer.url.trim().replace(/"/g, '\\"')}")` : 'none';
+  if (layer.kind === 'other') return layer.text;
+  const stops = layer.stops.map(({ color, position }) => `${color} ${position}`.trim()).filter(Boolean);
+  return `${layer.repeating ? 'repeating-' : ''}${layer.type}-gradient(${[layer.prelude.trim(), ...stops].filter(Boolean).join(', ')})`;
+}
+
+function backgroundLayerName(layer) {
+  if (layer.kind === 'image') {
+    if (!layer.url.trim()) return 'No image';
+    try {
+      return decodeURIComponent(new URL(layer.url, location.href).pathname.split('/').pop()) || layer.url;
+    } catch {
+      return layer.url;
+    }
+  }
+  if (layer.kind === 'other') return layer.text.split('(')[0];
+  return `${layer.repeating ? 'Repeating ' : ''}${layer.repeating ? layer.type : layer.type[0].toUpperCase() + layer.type.slice(1)} gradient`;
+}
+
+// The parts of a radial or conic prelude: "circle 40px at 30% 20%" or
+// "from 45deg at center".
+function gradientPreludeParts(prelude) {
+  const [head, at = ''] = String(prelude).split(/\s+at\s+|^at\s+/);
+  const words = cssWords(head);
+  const shape = words.find((word) => word === 'circle' || word === 'ellipse') || '';
+  const fromIndex = words.indexOf('from');
+  const from = fromIndex >= 0 ? words[fromIndex + 1] || '' : '';
+  const rest = words.filter((word, index) => word !== shape && index !== fromIndex && index !== fromIndex + 1).join(' ');
+  return { shape, from, at: at.trim(), rest };
+}
+
+// A list value as one entry per layer, repeating a shorter list as CSS does.
+function backgroundLayerEntries(value, count, fallback) {
+  const entries = cssLayers(String(value || ''));
+  if (!entries.length) entries.push(fallback);
+  return Array.from({ length: count }, (_, index) => entries[index % entries.length]);
+}
+
+// A text field inside a layer's popover: a prefix and a value, no property.
+function backgroundLayerInput(prefixText, title, value, onChange, placeholder = '') {
+  const { shell, input } = childInput(null, prefixText, value);
+  input.removeAttribute('inputmode');
+  input.setAttribute('aria-label', title);
+  input.placeholder = placeholder;
+  shell.title = title;
+  input.addEventListener('change', () => onChange(input.value.trim()));
+  return { shell, input };
+}
+
+// Background image as a list: a row per layer that opens its fields, − to
+// remove it, + to add a gradient or an image on top. Size, position and
+// repeat below follow the chosen row and edit only its entry of their lists.
+function backgroundLayersFields(values) {
+  const field = typeField('Background image', true);
+  field.classList.add('inspector-background-layers');
+  const imageInput = hiddenInspectorInput('backgroundImage', String(values?.backgroundImage || 'none'));
+  const partInputs = Object.fromEntries(BACKGROUND_LAYER_PARTS.map(([property, fallback]) => [property, hiddenInspectorInput(property, String(values?.[property] || fallback))]));
+  const parse = () => (imageInput.value.trim() === 'none' ? [] : cssLayers(imageInput.value).map(parseBackgroundLayer));
+  let layers = parse();
+  let selected = 0;
+  // Layers added here or emptied keep their row though they read as none.
+  const compose = () => layers.map(composeBackgroundLayer).join(', ') || 'none';
+  const entries = (property) => backgroundLayerEntries(partInputs[property].value, layers.length, BACKGROUND_LAYER_PARTS.find(([own]) => own === property)[1]);
+  const commitImage = () => setChildValue(imageInput, compose());
+  const setEntry = (property, value) => {
+    const list = entries(property);
+    list[selected] = value;
+    setChildValue(partInputs[property], list.join(', '));
+  };
+  const lineButton = (path, title, onClick) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'inspector-group-action';
+    button.title = title;
+    button.setAttribute('aria-label', title);
+    button.innerHTML = inspectorIcon(path);
+    if (onClick) button.addEventListener('click', onClick);
+    return button;
+  };
+
+  // + adds a layer on top, with the first entries of the other lists.
+  const header = document.createElement('div');
+  header.className = 'inspector-type-header';
+  header.dataset.properties = 'backgroundImage';
+  const add = lineButton(INSPECTOR_ICON_PATHS.type.add, 'Add background layer');
+  const addLayer = (text) => {
+    const lists = BACKGROUND_LAYER_PARTS.map(([property, fallback]) => [property, layers.length ? entries(property) : [], fallback]);
+    layers.unshift(parseBackgroundLayer(text));
+    selected = 0;
+    commitImage();
+    lists.forEach(([property, list, fallback]) => setChildValue(partInputs[property], [fallback, ...list].join(', ')));
+    render();
+    list.querySelector('.inspector-shadow-summary')?.click();
+  };
+  inspectorMenu(add, header, () => ({
+    groups: [{
+      items: [
+        ['Linear gradient', 'linear-gradient(180deg, #FFFFFF 0%, #000000 100%)'],
+        ['Radial gradient', 'radial-gradient(circle at 50% 50%, #FFFFFF 0%, #000000 100%)'],
+        ['Image', 'none']
+      ].map(([text, value]) => ({ text, pick: () => addLayer(value) }))
+    }]
+  }));
+  header.append(field.querySelector('.inspector-type-label'), add);
+
+  const list = document.createElement('div');
+  list.className = 'inspector-shadow-list';
+
+  // A gradient's fields: type, repeating, direction or shape, and its stops.
+  const gradientFields = (layer, changed) => {
+    const fields = document.createElement('div');
+    fields.className = 'inspector-shadow-fields';
+    const { tabs: typeTabs, press: pressType } = childTabs('Gradient type', GRADIENT_KINDS.map((key) => ({ key, text: key[0].toUpperCase() + key.slice(1), title: `${key[0].toUpperCase() + key.slice(1)} gradient` })), (key) => {
+      if (key === layer.type) return;
+      layer.type = key;
+      // A direction or shape of one type means nothing to another.
+      layer.prelude = key === 'radial' ? 'circle at 50% 50%' : key === 'linear' ? '180deg' : '';
+      if (!CSS.supports('background-image', composeBackgroundLayer(layer))) layer.stops.forEach((stop) => { stop.position = ''; });
+      changed();
+      draw();
+    });
+    typeTabs.classList.add('is-full');
+    const { tabs: repeatTabs, press: pressRepeat } = childTabs('Gradient repeat', [
+      { key: 'once', text: 'Once', title: 'Draw the stops once across the layer' },
+      { key: 'repeating', text: 'Repeating', title: 'Repeat the stops until the layer is filled' }
+    ], (key) => {
+      layer.repeating = key === 'repeating';
+      pressRepeat(key);
+      changed();
+    });
+    repeatTabs.classList.add('is-full');
+    const shape = document.createElement('div');
+    shape.className = 'is-full inspector-shadow-fields';
+    const stops = document.createElement('div');
+    stops.className = 'is-full inspector-gradient-stops';
+    const setPrelude = (parts) => {
+      const head = layer.type === 'conic'
+        ? (parts.from ? `from ${parts.from}` : '')
+        : [parts.shape, parts.rest].filter(Boolean).join(' ');
+      layer.prelude = [head, parts.at ? `at ${parts.at}` : ''].filter(Boolean).join(' ');
+      changed();
+    };
+    const drawShape = () => {
+      const parts = gradientPreludeParts(layer.prelude);
+      const children = [];
+      if (layer.type === 'linear') {
+        const angle = backgroundLayerInput('Angle', 'Gradient angle or direction', layer.prelude, (value) => {
+          layer.prelude = value;
+          changed();
+        }, '180deg');
+        angle.shell.classList.add('is-full');
+        children.push(angle.shell);
+      } else {
+        if (layer.type === 'radial') {
+          const { tabs, press } = childTabs('Gradient shape', [
+            { key: 'circle', text: 'Circle', title: 'A circle' },
+            { key: 'ellipse', text: 'Ellipse', title: 'An ellipse stretched to the layer' }
+          ], (key) => {
+            // A size written for one shape may not fit the other.
+            setPrelude({ ...gradientPreludeParts(layer.prelude), shape: key, rest: '' });
+            press(key);
+          });
+          tabs.classList.add('is-full');
+          press(parts.shape || 'ellipse');
+          children.push(tabs);
+        } else {
+          const from = backgroundLayerInput('From', 'Starting angle', parts.from, (value) => setPrelude({ ...gradientPreludeParts(layer.prelude), from: value }), '0deg');
+          children.push(from.shell);
+        }
+        const at = backgroundLayerInput('At', 'Gradient center', parts.at, (value) => setPrelude({ ...gradientPreludeParts(layer.prelude), at: value }), 'center');
+        if (layer.type === 'radial') at.shell.classList.add('is-full');
+        children.push(at.shell);
+      }
+      shape.replaceChildren(...children);
+    };
+    const drawStops = () => {
+      const stopsHeader = document.createElement('div');
+      stopsHeader.className = 'inspector-type-header';
+      const caption = document.createElement('span');
+      caption.className = 'inspector-type-label';
+      caption.textContent = 'Stops';
+      stopsHeader.append(caption, lineButton(INSPECTOR_ICON_PATHS.type.add, 'Add color stop', () => {
+        const last = layer.stops[layer.stops.length - 1];
+        layer.stops.push({ color: last?.color || '#000000', position: '100%' });
+        changed();
+        drawStops();
+      }));
+      stops.replaceChildren(stopsHeader, ...layer.stops.map((stop, index) => {
+        const row = document.createElement('div');
+        row.className = 'inspector-gradient-stop';
+        // Shown as hex like the panel's other colors; kept as written until edited.
+        const color = colorShell(null, `Stop ${index + 1} color`, cssColorToHex(stop.color) || stop.color, (value) => {
+          if (!value) return;
+          stop.color = value;
+          changed();
+        });
+        const position = backgroundLayerInput('', `Stop ${index + 1} position`, stop.position, (value) => {
+          stop.position = value;
+          changed();
+        }, 'Auto');
+        position.shell.querySelector('.inspector-input-prefix').remove();
+        // A gradient needs two stops.
+        const remove = lineButton(INSPECTOR_ICON_PATHS.type.remove, 'Remove color stop', () => {
+          layer.stops.splice(index, 1);
+          changed();
+          drawStops();
+        });
+        remove.disabled = layer.stops.length <= 2;
+        row.append(color.shell, position.shell, remove);
+        return row;
+      }));
+    };
+    const draw = () => {
+      pressType(layer.type);
+      pressRepeat(layer.repeating ? 'repeating' : 'once');
+      drawShape();
+      drawStops();
+    };
+    draw();
+    fields.append(typeTabs, repeatTabs, shape, stops);
+    return fields;
+  };
+
+  const layerFields = (layer, changed) => {
+    if (layer.kind === 'gradient') return gradientFields(layer, changed);
+    const fields = document.createElement('div');
+    fields.className = 'inspector-shadow-fields';
+    const { shell } = layer.kind === 'image'
+      ? backgroundLayerInput('URL', 'Image address', layer.url, (value) => {
+        layer.url = value;
+        changed();
+      }, 'https://…')
+      : backgroundLayerInput('CSS', 'Layer as written', layer.text, (value) => {
+        if (!value) return;
+        layer.text = value;
+        changed();
+      });
+    shell.classList.add('is-full');
+    fields.append(shell);
+    return fields;
+  };
+
+  const render = () => {
+    selected = Math.min(selected, Math.max(0, layers.length - 1));
+    list.replaceChildren(...layers.map((layer, position) => {
+      const row = document.createElement('div');
+      row.className = 'inspector-shadow-row';
+      row.classList.toggle('is-selected', position === selected);
+      const trigger = document.createElement('button');
+      trigger.type = 'button';
+      trigger.className = 'inspector-input-shell inspector-shadow-summary';
+      trigger.title = 'Edit background layer';
+      const swatch = document.createElement('span');
+      swatch.className = 'inspector-shadow-swatch inspector-layer-swatch';
+      const text = document.createElement('span');
+      text.className = 'inspector-menu-value';
+      trigger.append(swatch, text);
+      const showSummary = () => {
+        const css = composeBackgroundLayer(layer);
+        swatch.style.setProperty('--layer', css === 'none' ? 'none' : css);
+        text.textContent = backgroundLayerName(layer);
+        trigger.title = css;
+      };
+      showSummary();
+      // The row picks the layer that Size, position and Repeat edit.
+      trigger.addEventListener('click', () => {
+        if (selected === position) return;
+        selected = position;
+        list.querySelectorAll('.inspector-shadow-row').forEach((other, index) => other.classList.toggle('is-selected', index === selected));
+        syncParts();
+      });
+      const changed = () => {
+        const css = composeBackgroundLayer(layer);
+        if (css !== 'none' && !CSS.supports('background-image', css)) return;
+        showSummary();
+        commitImage();
+      };
+      inspectorPopover(trigger, row, layerFields(layer, changed));
+      row.prepend(trigger, lineButton(INSPECTOR_ICON_PATHS.type.remove, 'Remove background layer', () => {
+        const lists = BACKGROUND_LAYER_PARTS.map(([property]) => [property, entries(property)]);
+        layers.splice(position, 1);
+        commitImage();
+        // The other lists lose the same entry; with no layer left they no
+        // longer matter and stay as they are.
+        if (layers.length) lists.forEach(([property, entryList]) => {
+          entryList.splice(position, 1);
+          setChildValue(partInputs[property], entryList.join(', '));
+        });
+        if (selected > position) selected -= 1;
+        render();
+      }));
+      return row;
+    }));
+    list.hidden = !layers.length;
+    syncParts();
+  };
+
+  // Size, position and repeat of the chosen layer. Their inputs carry no
+  // property: a pick writes the layer's entry into the property's list, and
+  // the change dot follows the whole property.
+  const partControl = (control, property, read) => {
+    control.dataset.properties = property;
+    const input = control.querySelector('input[type="hidden"]');
+    delete input.dataset.property;
+    input.removeAttribute('name');
+    ['input', 'change'].forEach((type) => control.addEventListener(type, (event) => {
+      if (event.target !== input) return;
+      event.stopPropagation();
+      if (type === 'change') setEntry(property, read ? read(input.value) : input.value);
+    }));
+    const refresh = control.refreshFromPanel;
+    control.show = (value) => {
+      input.value = value;
+      refresh?.();
+    };
+    control.refreshFromPanel = () => {
+      refresh?.();
+      if (changedInspectorProperties.get(inspectorChangeKey)?.has(property)) markInspectorFieldChanged(property);
+    };
+    return control;
+  };
+  const size = partControl(menuSelectField('backgroundLayerSize', 'Size', [
+    ['auto', 'Auto', 'Keep the image at its own size'],
+    ['cover', 'Cover', 'Fill the element and crop what does not fit'],
+    ['contain', 'Contain', 'Fit the whole image inside the element']
+  ], 'auto'), 'backgroundSize');
+  const position = partControl(positionMatrixField('backgroundLayerPosition', '0% 0%', 'image'), 'backgroundPosition');
+  const repeatRow = document.createElement('div');
+  repeatRow.className = 'inspector-field is-wide is-tabs';
+  const repeat = hiddenInspectorInput('backgroundLayerRepeat', 'repeat');
+  const { tabs, press } = childTabs('Repeat', [
+    { key: 'repeat', text: 'Repeat', title: 'Tile in both directions' },
+    { key: 'repeat-x', text: 'X', title: 'Tile across only' },
+    { key: 'repeat-y', text: 'Y', title: 'Tile down only' },
+    { key: 'no-repeat', text: 'None', title: 'Show the image once' }
+  ], (key) => {
+    setInputValue(repeat, key);
+    press(key);
+  });
+  repeatRow.refreshFromPanel = () => press(repeat.value);
+  repeatRow.append(tabs, repeat);
+  partControl(repeatRow, 'backgroundRepeat');
+  const parts = [size, position, repeatRow];
+  function syncParts() {
+    const shown = Boolean(layers.length);
+    parts.forEach((control) => {
+      control.hidden = !shown;
+    });
+    if (!shown) return;
+    size.show(entries('backgroundSize')[selected]);
+    position.show(entries('backgroundPosition')[selected]);
+    repeatRow.show(entries('backgroundRepeat')[selected]);
+  }
+
+  field.classList.add('inspector-syncs');
+  field.refreshFromPanel = () => {
+    if (imageInput.value !== compose()) {
+      layers = parse();
+      render();
+    } else syncParts();
+  };
+  field.append(header, list, imageInput, ...Object.values(partInputs));
+  render();
+  return [field, ...parts];
 }
 
 // overflow as tabs. A value that differs per axis ("hidden auto") presses

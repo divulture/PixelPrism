@@ -64,7 +64,8 @@ window.addEventListener('message', (event) => {
       const actual = actualValueFor(element, change.property);
       if (state) releaseForcedState();
       // Alt text is words: it has to match exactly.
-      const matches = change.property === 'alt' ? actual === change.after : valuesMatch(change.property, actual, change.after);
+      const matches = change.property === 'alt' ? actual === change.after
+        : valuesMatch(change.property, actual, change.after);
       if (actual !== null && matches) resolved.push({ key: change.key, after: change.after });
     }
     overrides.forEach((style) => { style.disabled = false; });

@@ -1,3 +1,6 @@
+// The size of the active tab on the toolbar icon (a setting in options.html).
+import './icon-size.js';
+
 // Usage analytics is paused (Product/ANALYTICS.md). An install or update
 // clears what an earlier version stored about it.
 async function clearStoredAnalytics() {

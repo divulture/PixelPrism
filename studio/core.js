@@ -112,9 +112,8 @@ let inspectorModeActive = false;
 let layersFrame;
 let layersTreeData;
 let selectedLayerPath;
-// Text selected inside the element at selectedLayerPath: its index among the
-// element's child nodes, or null when the element itself is selected.
-let selectedLayerText = null;
+// '', 'before' or 'after': which part of the selected layer is chosen.
+let selectedLayerPseudo = '';
 let hoveredLayerPath;
 const expandedLayerPaths = new Set();
 const collapsedLayerPaths = new Set();
@@ -260,7 +259,7 @@ function viewportLabel(item, { workspace = true } = {}) {
 
 const MIN_VIEWPORT_WIDTH = 320;
 const MIN_VIEWPORT_HEIGHT = 320;
-const INSPECTOR_PROTOCOL_VERSION = 82;
+const INSPECTOR_PROTOCOL_VERSION = 96;
 
 // The Inspector's states.
 const INSPECTOR_STATE_LABELS = { default: 'Default', hover: 'Hover', focus: 'Focus', active: 'Pressed' };
@@ -378,15 +377,35 @@ urlInput.addEventListener('blur', () => {
   }, 0);
 });
 
+// Local servers rarely have a certificate: an address typed without a scheme
+// opens them over http, everything else over https.
+function isLocalHostName(host) {
+  const name = host.toLowerCase();
+  return name === 'localhost' || name.endsWith('.localhost') || name.endsWith('.test') || name.endsWith('.local')
+    || name === '[::1]' || name === '0.0.0.0'
+    || /^(127|10)\.\d+\.\d+\.\d+$/.test(name) || /^192\.168\.\d+\.\d+$/.test(name)
+    || /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/.test(name);
+}
+
+// What a typed address opens: "site.ru" and "localhost:3000" get their
+// scheme added; only http, https and file are opened.
 function normalizeUrl(value) {
   const candidate = value.trim();
   if (!candidate) return '';
-  if (candidate.startsWith('/')) return new URL(candidate, 'file:///').href;
+  if (candidate.startsWith('/') && !candidate.startsWith('//')) return new URL(candidate, 'file:///').href;
+  let address = candidate;
+  if (!/^[a-z][a-z\d+.-]*:\/\//i.test(candidate)) {
+    // "mailto:…" or "javascript:…" is another scheme, not a host and port.
+    if (/^[a-z][a-z\d+.-]*:(?!\d)/i.test(candidate)) return '';
+    const rest = candidate.replace(/^\/\//, '');
+    const host = rest.startsWith('[') ? rest.slice(0, rest.indexOf(']') + 1) : rest.split(/[/:?#]/)[0];
+    address = `${isLocalHostName(host) ? 'http' : 'https'}://${rest}`;
+  }
   try {
-    const parsed = new URL(candidate);
-    return ['http:', 'https:', 'file:'].includes(parsed.protocol) ? parsed.href : '';
+    const parsed = new URL(address);
+    return ['http:', 'https:', 'file:'].includes(parsed.protocol) && (parsed.protocol === 'file:' || parsed.hostname) ? parsed.href : '';
   } catch {
-    return /^[a-z][a-z\d+.-]*:/i.test(candidate) ? '' : `https://${candidate}`;
+    return '';
   }
 }
 

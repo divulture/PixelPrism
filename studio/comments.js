@@ -1,10 +1,24 @@
 // Comments: the list, markers, picking, editing, and importing an exported review.
 
+// A region dragged over a preview: its box in the comment's element and
+// the elements inside it. Anything malformed is left out.
+function commentAreaFrom(source) {
+  const area = source?.area;
+  if (!area || !['x', 'y', 'width', 'height'].every((key) => Number.isFinite(area[key])) || area.width < 1 || area.height < 1) return {};
+  const elements = Array.isArray(source.elements) ? source.elements.filter((element) => element && typeof element === 'object').slice(0, 24) : [];
+  return { area: { x: Math.round(area.x), y: Math.round(area.y), width: Math.round(area.width), height: Math.round(area.height) }, ...(elements.length ? { elements } : {}) };
+}
+
+function commentAreaLabel(comment) {
+  const count = comment.elements?.length || 0;
+  return count ? `Area · ${count} element${count === 1 ? '' : 's'}` : `Area in ${comment.element?.selector || 'page'}`;
+}
+
 function activeCommentContext() {
   if (!commentSelection?.frame?.isConnected) return null;
   const card = cardForFrame(commentSelection.frame.contentWindow);
   if (!card) return null;
-  return { url: canonicalInspectorUrl(card.dataset.loadedUrl || targetUrl), route: commentSelection.route || '/', viewport: { width: Number(card.dataset.viewportWidth), height: Number(card.dataset.viewportHeight) }, element: commentSelection.element, offset: commentSelection.offset || null, steps: commentSelection.steps || [], snapshot: commentSelection.snapshot || null };
+  return { url: canonicalInspectorUrl(card.dataset.loadedUrl || targetUrl), route: commentSelection.route || '/', viewport: { width: Number(card.dataset.viewportWidth), height: Number(card.dataset.viewportHeight) }, element: commentSelection.element, offset: commentSelection.offset || null, ...commentAreaFrom(commentSelection), steps: commentSelection.steps || [], snapshot: commentSelection.snapshot || null };
 }
 
 // Comments have no stored id; this one only has to stay stable while the
@@ -60,6 +74,7 @@ const shortText = (text) => {
   const value = String(text ?? '').replace(/\s+/g, ' ').trim();
   return value.length > 40 ? `${value.slice(0, 39)}…` : value;
 };
+
 
 // An edit to ::before or ::after names it: "::after width: 0px → 100%".
 function changeNoteText(changes) {
@@ -403,7 +418,7 @@ function renderCommentItem(comment, index) {
   meta.append(number);
   const target = document.createElement('span');
   target.className = 'comment-target';
-  target.textContent = comment.pin ? 'Pinned point' : comment.element?.selector || 'Page';
+  target.textContent = comment.pin ? 'Pinned point' : comment.area ? commentAreaLabel(comment) : comment.element?.selector || 'Page';
   target.title = target.textContent;
   // While moving, the hint takes the selector's place.
   const state = isPlacing ? 'Click an element · Esc cancels' : commentPlacementLabel(comment, placement);
@@ -512,7 +527,7 @@ function syncCommentMarkers() {
     if (!enabled && !card.commentMarkersPayload) return;
     const markers = enabled ? comments.flatMap((comment) => (
       isCommentAnchored(comment) && commentShownOnCard(comment, card)
-        ? [{ id: commentId(comment), number: commentNumber(comment), text: commentSummary(comment), element: comment.element || null, selector: comment.element?.selector || '', pin: comment.pin || null, offset: comment.offset || null, steps: comment.steps || [] }]
+        ? [{ id: commentId(comment), number: commentNumber(comment), text: commentSummary(comment), element: comment.element || null, selector: comment.element?.selector || '', pin: comment.pin || null, offset: comment.offset || null, area: comment.area || null, steps: comment.steps || [] }]
         : []
     )) : [];
     const message = { source: 'viewport-parade', type: 'comment-markers', enabled, markers, selectedId: enabled ? selectedCommentId : null, scale: Number(card.dataset.scale) || 1 };
@@ -552,7 +567,7 @@ function setCommentPlacing(id) {
 
 // Re-binds a comment to an element or point in a preview. The comment then
 // belongs to that preview's page and width, like a newly written one.
-function moveComment(id, card, { element, pin, route, offset, same = false, steps, snapshot }) {
+function moveComment(id, card, { element, pin, route, offset, same = false, steps, snapshot, area, elements }) {
   const comment = commentById(id);
   if (!comment || !card) return;
   // An edit's marker stays on the edited element: send it back there.
@@ -581,9 +596,18 @@ function moveComment(id, card, { element, pin, route, offset, same = false, step
     comment.pin = { x: Math.round(pin.x), y: Math.round(pin.y) };
     delete comment.element;
     delete comment.offset;
+    delete comment.area;
+    delete comment.elements;
   } else if (element && typeof element === 'object') {
     comment.element = element;
     delete comment.pin;
+    // A marker moved within its element keeps its area; attached anywhere
+    // else, the comment covers the new element or the area just drawn.
+    if (!same) {
+      delete comment.area;
+      delete comment.elements;
+      Object.assign(comment, commentAreaFrom({ area, elements }));
+    }
     // A marker dragged into place keeps its spot in the element; a comment
     // attached by clicking starts at the element's corner again.
     if (offset && Number.isFinite(offset.x) && Number.isFinite(offset.y)) comment.offset = { x: Math.round(offset.x), y: Math.round(offset.y) };
@@ -642,7 +666,7 @@ function addComment(rawComment) {
   const place = placeOfCard((context && cardForFrame(commentSelection.frame.contentWindow)) || activeCard);
   const viewport = context?.viewport || (activeCard ? { width: Number(activeCard.dataset.viewportWidth), height: Number(activeCard.dataset.viewportHeight) } : { width: window.innerWidth, height: window.innerHeight });
   if (context?.snapshot) storeViewSnapshot(context.snapshot);
-  comments.push({ type: 'comment', url: context?.url || canonicalInspectorUrl(activeCard?.dataset.loadedUrl || targetUrl), route: context?.route || '/', viewport, ...place, ...(context?.element ? { element: context.element } : {}), ...(context?.element && context.offset ? { offset: context.offset } : {}), ...(context?.steps?.length ? { steps: context.steps } : {}), ...(context?.snapshot ? { snapshot: context.snapshot.id } : {}), comment, ...(draftAttachments.length ? { attachments: draftAttachments } : {}) });
+  comments.push({ type: 'comment', url: context?.url || canonicalInspectorUrl(activeCard?.dataset.loadedUrl || targetUrl), route: context?.route || '/', viewport, ...place, ...(context?.element ? { element: context.element } : {}), ...(context?.element && context.offset ? { offset: context.offset } : {}), ...(context?.element ? commentAreaFrom(context) : {}), ...(context?.steps?.length ? { steps: context.steps } : {}), ...(context?.snapshot ? { snapshot: context.snapshot.id } : {}), comment, ...(draftAttachments.length ? { attachments: draftAttachments } : {}) });
   trackProductEvent('comment_created');
   commentInput.value = '';
   draftAttachments = [];
@@ -713,6 +737,7 @@ async function importReviewFile(file) {
           ...(pin ? { pin } : {}),
           ...(Array.isArray(sourceViewport.steps) && sourceViewport.steps.length ? { steps: sourceViewport.steps } : {}),
           ...(!pin && element && entry.offset && Number.isFinite(entry.offset.x) && Number.isFinite(entry.offset.y) ? { offset: { x: Math.round(entry.offset.x), y: Math.round(entry.offset.y) } } : {}),
+          ...(!pin && element ? commentAreaFrom(entry) : {}),
           comment: String(entry.text || ''),
           // Names and sizes only for now: enough to tell duplicates apart.
           ...(images.length ? { attachments: images.map((image) => ({ name: String(image.name || 'image.png'), size: Math.round(Number(image.size) || 0) })) } : {})

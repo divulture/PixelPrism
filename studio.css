@@ -330,8 +330,8 @@ body[data-mode="single"] .viewport-grid { justify-content: center; }.workspace:h
 .inspector-panel-selector { margin: 0; overflow: hidden; color: var(--fg-7a8190); font: inherit; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
 /* Icon button: one ghost look for the panels' small actions (close, more,
    add, toggles). Each place sets only its size (--icon-button-size) and spot. */
-.icon-button, .toolbar-ghost-button, .zoom-button, .ruler-button, .contrast-button, .grid-overlay-button, .apply-button, .breadcrumbs-step-down, .inspector-panel-close, .layers-panel-close, .layers-comment, .comments-panel-close, .code-panel-close, .comments-menu-toggle, .inspector-group-action, .inspector-spacing-toggle, .inspector-note-close, .comment-more, .comment-delete, .comment-attach { display: grid; flex: none; place-items: center; inline-size: var(--icon-button-size, 24px); block-size: var(--icon-button-size, 24px); padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--muted); cursor: pointer; }
-:is(.icon-button, .toolbar-ghost-button, .zoom-button, .ruler-button, .contrast-button, .grid-overlay-button, .apply-button, .breadcrumbs-step-down, .inspector-panel-close, .layers-panel-close, .layers-comment, .comments-panel-close, .code-panel-close, .comments-menu-toggle, .inspector-group-action, .inspector-spacing-toggle, .inspector-note-close, .comment-more, .comment-delete, .comment-attach):hover { background: var(--bg-f4f4f5); color: var(--ink); }
+.icon-button, .toolbar-ghost-button, .zoom-button, .ruler-button, .contrast-button, .grid-overlay-button, .apply-button, .breadcrumbs-step-down, .inspector-panel-close, .layers-panel-close, .layers-comment, .layers-visibility, .comments-panel-close, .code-panel-close, .comments-menu-toggle, .inspector-group-action, .inspector-spacing-toggle, .inspector-note-close, .comment-more, .comment-delete, .comment-attach { display: grid; flex: none; place-items: center; inline-size: var(--icon-button-size, 24px); block-size: var(--icon-button-size, 24px); padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--muted); cursor: pointer; }
+:is(.icon-button, .toolbar-ghost-button, .zoom-button, .ruler-button, .contrast-button, .grid-overlay-button, .apply-button, .breadcrumbs-step-down, .inspector-panel-close, .layers-panel-close, .layers-comment, .layers-visibility, .comments-panel-close, .code-panel-close, .comments-menu-toggle, .inspector-group-action, .inspector-spacing-toggle, .inspector-note-close, .comment-more, .comment-delete, .comment-attach):hover { background: var(--bg-f4f4f5); color: var(--ink); }
 .inspector-panel-close { margin: -4px -4px 0 0; }
 .inspector-group { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; gap: 8px 4px; }
 .inspector-group[hidden], .inspector-field[hidden] { display: none; }
@@ -444,6 +444,10 @@ body, body * { font-family: Inter, ui-sans-serif, system-ui, -apple-system, Blin
 .inspector-popover[hidden] { display: none; }
 .inspector-shadow-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
 .inspector-shadow-fields > .is-full { grid-column: 1 / -1; }
+.inspector-layer-swatch { background: var(--layer, none) center / cover no-repeat, repeating-conic-gradient(#d4d4d8 0 25%, #fff 0 50%) 0 0 / 6px 6px; }
+.inspector-shadow-row.is-selected > .inspector-shadow-summary { box-shadow: inset 0 0 0 1px var(--accent); }
+.inspector-gradient-stops { display: grid; gap: 4px; }
+.inspector-gradient-stop { display: grid; grid-template-columns: minmax(0, 1fr) 72px 20px; align-items: center; gap: 4px; }
 .inspector-spacing-toggle { --icon-button-size: var(--field-height); }
 .inspector-spacing-toggle[aria-pressed="true"] { background: var(--bg-f4f4f5); color: var(--ink); }
 .inspector-group:not(.is-showing-more) .inspector-field.is-more { display: none; }
@@ -629,7 +633,6 @@ body:has(#comments-panel:not([hidden])) .workspace { padding-inline-start: calc(
 .layers-icon { display: grid; flex: none; place-items: center; inline-size: 16px; block-size: 16px; margin-inline-end: 4px; color: var(--fg-7a8190); }
 .layers-row.is-selected .layers-icon { color: inherit; }
 /* Text beside child elements: its own layer, in the text's own weight. */
-.layers-node.is-text > .layers-row .layers-select { font-weight: 400; }
 .layers-expand, .layers-expand-spacer { flex: 0 0 20px; inline-size: 20px; block-size: 24px; }
 .layers-expand { display: grid; place-items: center; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--fg-646b78); }
 .layers-expand svg { inline-size: 14px; block-size: 14px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 22; }
@@ -639,7 +642,11 @@ body:has(#comments-panel:not([hidden])) .workspace { padding-inline-start: calc(
 .layers-comment { margin-inline-end: 4px; opacity: 0; }
 .layers-row:hover .layers-comment, .layers-row:focus-within .layers-comment, .layers-row.is-selected .layers-comment { opacity: 1; }
 .layers-row.is-selected .layers-comment { color: inherit; }
-.layers-comment svg { inline-size: 14px; block-size: 14px; fill: currentColor; }
+.layers-visibility { margin-inline-end: 4px; opacity: 0; }
+.layers-row:hover .layers-visibility, .layers-row:focus-within .layers-visibility, .layers-row.is-selected .layers-visibility, .layers-visibility[aria-pressed="true"] { opacity: 1; }
+.layers-row.is-selected .layers-visibility { color: inherit; }
+.layers-row.is-hidden :is(.layers-icon, .layers-select) { opacity: .5; }
+.layers-comment svg, .layers-visibility svg { inline-size: 14px; block-size: 14px; fill: currentColor; }
 @keyframes layers-panel-in { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
 /* Like the comments panel, Layers moves the previews aside instead of covering them. */
 /* Layers and Comments share a side and a width. */
@@ -812,14 +819,15 @@ body:has(#layers-panel:not([hidden])) .workspace { padding-inline-start: calc(mi
 /* Breadcrumbs of the selected element: a see-through row along the bottom,
    between the side panels, under the floating dock, which stays in place. */
 .breadcrumbs { position: fixed; z-index: 39; inset-block-end: 0; inset-inline: 0; display: flex; align-items: center; gap: 2px; min-block-size: 36px; padding: 0 12px; overflow-x: auto; background: transparent; color: var(--fg-52525b); font-size: 12px; font-weight: 500; white-space: nowrap; scrollbar-width: none; pointer-events: none; }
-/* The bar spans the bottom; only its buttons take the pointer, the previews under it the rest. */
+/* The bar spans the bottom; only its buttons take the pointer, the previews under it the rest.
+   Each crumb has its own fill, so its text stays readable over the page. */
 .breadcrumbs > * { pointer-events: auto; }
 .breadcrumbs-layers { flex: none; }
 .breadcrumbs-path { display: flex; align-items: center; gap: 2px; margin-inline-start: 4px; padding-inline-start: 6px; border-inline-start: 1px solid var(--line); }
 .breadcrumbs-path[hidden] { display: none; }
-.breadcrumbs-path > button { flex: none; max-inline-size: 180px; padding: 5px 8px; overflow: hidden; border: 0; border-radius: 4px; background: transparent; color: inherit; cursor: pointer; font: inherit; text-overflow: ellipsis; }
-.breadcrumbs-path > button:hover { background: var(--bg-f4f4f5); color: var(--ink); }
-.breadcrumbs-path > button[aria-current] { background: var(--bg-eeeeef); color: var(--ink); cursor: default; }
+.breadcrumbs-path > button { flex: none; max-inline-size: 180px; padding: 5px 8px; overflow: hidden; border: 0; border-radius: 4px; background: var(--bg-f4f4f5); color: inherit; cursor: pointer; font: inherit; text-overflow: ellipsis; }
+.breadcrumbs-path > button:hover { background: var(--bg-eeeeef); color: var(--ink); }
+.breadcrumbs-path > button[aria-current] { background: var(--bg-e4e4e7); color: var(--ink); cursor: default; }
 .breadcrumbs-path > button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .breadcrumbs-separator { display: grid; flex: none; place-items: center; color: var(--fg-a1a1aa); }
 .breadcrumbs-separator .inspector-line-icon { inline-size: 12px; block-size: 12px; }

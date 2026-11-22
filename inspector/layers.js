@@ -20,15 +20,18 @@ const layerPathFor = (element) => {
 const layerElementFor = (path) => Array.isArray(path)
   ? path.reduce((element, index) => element?.children[index], document.body)
   : undefined;
-// Text beside child elements has no tag or class of its own. It can still be
-// selected in Layers: the panel shows the values it takes from its parent,
-// and the first edit wraps it in a span that takes the styles. A wrapper
-// left with no changes comes off when the selection moves on; one with
-// changes stays, and its changes tell the agent to add the span.
-let selectedTextNode = null;
+// Text beside child elements (an h3 beside its icon and badge) has no tag or
+// class of its own, and no settings of its own either: they live on the
+// element that holds it, so a click, a hover or its Layers row select that
+// element, and Layers shows no row for it. Only a double click wraps the text, in a span that is the field to
+// type in (text-edit.js); its text change asks the agent to change that text
+// where it stands, not to add an element. A wrapper left with no changes
+// comes off when the selection moves on. Style changes that earlier versions
+// recorded on such a span still apply to it and still reach the agent.
 const TEXT_WRAPPER = 'viewportParadeText';
 const isTextWrapper = (element) => element?.dataset?.[TEXT_WRAPPER] !== undefined;
 const textWrapperSelector = (id) => `span[data-viewport-parade-text="${id}"]`;
+const textHolderFor = (node) => (isTextWrapper(node) ? node.parentElement : node);
 const wrapTextNode = (node, id = `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`) => {
   const span = document.createElement('span');
   span.dataset[TEXT_WRAPPER] = id;
@@ -42,7 +45,7 @@ const textWrapperHasChanges = (span) => {
 };
 const unwrapUnusedText = (keep) => {
   document.querySelectorAll('span[data-viewport-parade-text]').forEach((span) => {
-    if (span === keep || textWrapperHasChanges(span)) return;
+    if (span === keep || span === textEditing?.element || textWrapperHasChanges(span)) return;
     const parent = span.parentNode;
     span.replaceWith(...span.childNodes);
     parent?.normalize();
@@ -127,36 +130,42 @@ const layerKindFor = (element, textOnly) => {
   if (['main', 'section', 'article', 'aside', 'header', 'footer', 'nav'].includes(tag)) return 'section';
   return 'box';
 };
-// Children in page order. An element holding only text is one text layer;
-// text beside child elements becomes text layers of its own, which select
-// their parent.
+// The element's ::before and ::after that draw now (content other than
+// none), so decoration made of them can be found and selected in Layers.
+const layerPseudosFor = (element) => Object.keys(PSEUDO_SUFFIX)
+  .filter((pseudo) => hasPseudoContent(getComputedStyle(element, PSEUDO_SUFFIX[pseudo]).content));
+// Child elements in page order. Text is not a layer of its own: it belongs
+// to the element that holds it, whose row is its place. An element holding
+// only text shows it in its label; text beside child elements is left out,
+// and so is the temporary span a double click puts around it.
 const layerTreeFor = (element = document.body) => {
   const ignored = new Set(['script', 'style', 'meta', 'link', 'noscript', 'template']);
   const path = layerPathFor(element);
-  const isLayer = (node) => node.nodeType === Node.ELEMENT_NODE && !ignored.has(node.tagName.toLowerCase()) && !node.dataset.viewportParadeOverlay;
+  const isLayer = (node) => node.nodeType === Node.ELEMENT_NODE && !ignored.has(node.tagName.toLowerCase()) && !node.dataset.viewportParadeOverlay && !isTextWrapper(node);
   const elements = [...element.children].filter(isLayer);
   const text = layerTextFor(element);
   const name = layerNameFor(element);
-  if (!elements.length) {
-    // Wrapped text is still the text layer it was.
-    if (isTextWrapper(element)) return { path, label: text, kind: 'text', textWrapper: true, children: [] };
-    return { path, label: text ? `${name} · ${text}` : name, kind: layerKindFor(element, Boolean(text)), children: [] };
-  }
-  const children = [...element.childNodes].flatMap((node, textIndex) => {
-    if (isLayer(node)) return [layerTreeFor(node)];
-    if (node.nodeType !== Node.TEXT_NODE) return [];
-    const label = layerTextOf(node.textContent);
-    return label ? [{ path, label, kind: 'text', text: true, textIndex, children: [] }] : [];
-  });
-  return { path, label: name, kind: layerKindFor(element, false), children };
+  const pseudos = layerPseudosFor(element);
+  // Turned off by display: none, for the eye on the row.
+  const hidden = getComputedStyle(element).display === 'none';
+  const hiddenPseudos = pseudos.filter((pseudo) => getComputedStyle(element, PSEUDO_SUFFIX[pseudo]).display === 'none');
+  const node = { path, kind: layerKindFor(element, !elements.length && Boolean(text)), pseudos, hidden, hiddenPseudos };
+  if (!elements.length) return { ...node, label: text ? `${name} · ${text}` : name, children: [] };
+  return { ...node, label: name, children: elements.map((child) => layerTreeFor(child)) };
 };
 const sendLayersTree = () => window.parent.postMessage({
   source: 'viewport-parade', type: 'layers-tree', tree: layerTreeFor()
 }, extensionOrigin);
-const selectLayerElement = async (element, options = {}) => {
-  if (!element) return;
-  selectedTextNode = options.textNode?.parentNode === element ? options.textNode : null;
-  unwrapUnusedText(element);
+// keepText: the text wrapper a double click is about to edit. pseudo: the
+// ::before or ::after a Layers row chose ('' for the element itself); left
+// out, a pseudo-element chosen on the same element stays.
+const selectLayerElement = async (target, options = {}) => {
+  if (!target) return;
+  const element = textHolderFor(target);
+  // A comment's area comes only with the drag that drew it.
+  commentArea = options.area || null;
+  if (!commentArea) hideCommentAreaBox();
+  unwrapUnusedText(options.keepText);
   // A selection always exposes the same complete editor. The hover hit test
   // can highlight a spacing zone, but it must never make properties disappear
   // from the right-hand panel. Pointer selection skips tiny inline text
@@ -172,6 +181,7 @@ const selectLayerElement = async (element, options = {}) => {
   if (hoverOutline.style.display !== 'none') showHoverOutline(hoveredElement);
   show(selectedElement, 'size');
   if (interactionMode === 'comment') {
+    placeCommentArea();
     // Comments reuse the Inspector's hit testing and element-context logic,
     // but selecting a target must not expose the CSS editing panel.
   } else {
@@ -182,10 +192,9 @@ const selectLayerElement = async (element, options = {}) => {
       releaseForcedState();
       inspectorState = 'default';
     }
-    // ::before or ::after stays chosen while the same element is selected
-    // again; selected text has neither.
+    // ::before or ::after stays chosen while the same element is selected again.
     const samePseudoTarget = pseudoTarget === componentTarget;
-    if (!samePseudoTarget || selectedTextNode) {
+    if (!samePseudoTarget) {
       inspectorPseudo = '';
       pseudoTarget = undefined;
     }
@@ -198,6 +207,10 @@ const selectLayerElement = async (element, options = {}) => {
       selectedPseudos = pseudosFor(componentTarget, sheets);
       pseudoTarget = componentTarget;
     }
+    if (options.pseudo !== undefined) {
+      inspectorPseudo = selectedPseudos.includes(options.pseudo) ? options.pseudo : '';
+      componentSelector = editedComponentSelector();
+    }
     selectionViewSteps = viewStepsFor(componentTarget);
     populateEditor(selectedElement, 'component');
   }
@@ -206,20 +219,27 @@ const selectLayerElement = async (element, options = {}) => {
   postLayersSelected();
   reportSelectedElement();
 };
-const postLayersSelected = () => {
-  const textIndex = selectedTextNode ? [...selectedElement.childNodes].indexOf(selectedTextNode) : -1;
-  window.parent.postMessage({ source: 'viewport-parade', type: 'layers-selected', path: layerPathFor(selectedElement), ...(textIndex >= 0 ? { textIndex } : {}), ancestors: ancestorsFor(selectedElement), children: childrenFor(selectedElement) }, extensionOrigin);
+// The eye on a Layers row: the layer is selected and its Display set to None,
+// the same edit as the Display control, so it is recorded and reaches the
+// agent. Shown again, the edit is removed; a layer the page itself hides
+// gets Display Block.
+const setLayerHidden = async (path, pseudo, hidden) => {
+  const element = layerElementFor(path);
+  if (!element) return;
+  await selectLayerElement(element, { exact: true, pseudo });
+  if (selectedElement !== element || interactionMode === 'comment' || inspectorPseudo !== pseudo) return;
+  const current = getComputedStyle(element, PSEUDO_SUFFIX[pseudo] || null).display;
+  if (hidden) {
+    if (current !== 'none') applyEditorValue('display', 'none', current, false);
+  } else if (layoutRules.get(componentSelector)?.get('display') === 'none') {
+    applyEditorValue('display', '', 'none', true);
+  } else if (current === 'none') {
+    applyEditorValue('display', 'block', 'none', false);
+  }
+  populateEditor(selectedElement, 'component');
 };
-// The first edit of selected text: wrap it, and edit the wrapper from here on.
-const adoptTextWrapper = () => {
-  const span = wrapTextNode(selectedTextNode);
-  selectedTextNode = null;
-  selectedElement = span;
-  inspectorPseudo = '';
-  pseudoTarget = undefined;
-  baseComponentSelector = typographySelectorFor(span);
-  componentSelector = editedComponentSelector();
-  postLayersSelected();
+const postLayersSelected = () => {
+  window.parent.postMessage({ source: 'viewport-parade', type: 'layers-selected', path: layerPathFor(selectedElement), pseudo: inspectorPseudo, ancestors: ancestorsFor(selectedElement), children: childrenFor(selectedElement) }, extensionOrigin);
 };
 let layersRefreshTimer;
 

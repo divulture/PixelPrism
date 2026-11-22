@@ -17,7 +17,7 @@ function showInspectorPanel(editor, source) {
   // What the edits go to, under the title: "all .card" for every element a
   // shared class styles, or the one element ("img", "div#hero").
   const target = String(editor.title || '').split(' · ').slice(1).join(' · ');
-  inspectorPanelTitle.textContent = editor.context?.textOf ? 'Text' : 'Element';
+  inspectorPanelTitle.textContent = 'Element';
   inspectorPanelSelector.textContent = target;
   // Beside the title, with the icon Layers gives this kind of element.
   document.querySelector('#inspector-target').hidden = !target;
@@ -456,14 +456,6 @@ function showInspectorPanel(editor, source) {
     outdated.className = 'inspector-note';
     outdated.textContent = 'This preview runs an older PixelPrism page script, so some controls won\'t reach the page. Reload PixelPrism in chrome://extensions, then reopen Studio';
     panelGroups.unshift(outdated);
-  }
-  // Text without a tag or class of its own shows its parent's values; the
-  // first edit wraps it in a span that takes the change.
-  if (editor.context?.textOf) {
-    const note = document.createElement('p');
-    note.className = 'inspector-note';
-    note.textContent = `This text has no tag or class of its own: its values come from ${editor.context.textOf}. A change wraps it in a span, which the agent adds to the source`;
-    panelGroups.unshift(note);
   }
   inspectorPanelFields.replaceChildren(...panelGroups);
   if (inspectorFocusMode) focusInspectorGroups();

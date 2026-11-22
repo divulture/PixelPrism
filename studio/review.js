@@ -5,6 +5,13 @@ function reviewElementKey(element, selector = '') {
   return element.domPath || (element.id ? `#${element.id}` : '') || element.selector || selector || 'element';
 }
 
+// A comment's area on the screenshot: its box within its element's.
+function reviewAreaRect(rect, area) {
+  const x = Math.min(Math.max(area.x, 0), rect.width);
+  const y = Math.min(Math.max(area.y, 0), rect.height);
+  return { x: rect.x + x, y: rect.y + y, width: Math.max(0, Math.min(area.width, rect.width - x)), height: Math.max(0, Math.min(area.height, rect.height - y)) };
+}
+
 function promiseWithTimeout(promise, timeout, message) {
   return new Promise((resolve, reject) => {
     const timer = window.setTimeout(() => reject(new Error(message)), timeout);
@@ -801,7 +808,8 @@ function reviewHtmlContexts() {
       if (!context.targets.has(targetId)) context.targets.set(targetId, { element, selector });
     }
     const offset = !pin && source.offset && Number.isFinite(source.offset.x) && Number.isFinite(source.offset.y) ? source.offset : null;
-    context.entries.push({ ...entry, selector: entry.ruleSelector || selector, element, pin, offset, targetId, order: context.entries.length });
+    const area = !pin && element ? commentAreaFrom(source) : {};
+    context.entries.push({ ...entry, selector: entry.ruleSelector || selector, element, pin, offset, ...area, targetId, order: context.entries.length });
   };
 
   // Edit entries stay out: the review shows the edits themselves below.
@@ -837,7 +845,7 @@ function reviewHtmlContexts() {
     property: change.property,
     from: String(change.from || '').trim(),
     to: String(change.to || '').trim(),
-    text: change.wrapText ? `${describeReviewChange(change)} (text “${change.wrapText.text}”: wrap it in a span)` : describeReviewChange(change)
+    text: change.wrapText && change.property !== 'text' ? `${describeReviewChange(change)} (text “${change.wrapText.text}”: wrap it in a span)` : describeReviewChange(change)
   }));
 
   return [...contexts.values()]
@@ -943,6 +951,11 @@ function reviewHtmlViewport(context, pageIndex, viewportIndex) {
       if (target === 'element') result.target = 'pin';
     }
     if (entry.offset) result.offset = entry.offset;
+    // Kept for import; the review highlights the area instead of its element.
+    if (entry.area) {
+      result.area = entry.area;
+      if (entry.elements) result.elements = entry.elements;
+    }
     if (rect) {
       const { width, height } = shots[shot];
       // A marker moved within its element keeps that spot; others stack
@@ -952,7 +965,7 @@ function reviewHtmlViewport(context, pageIndex, viewportIndex) {
       const x = rect.x + (entry.offset ? Math.min(Math.max(entry.offset.x, 0), rect.width) : 0);
       const y = rect.y + (entry.offset ? Math.min(Math.max(entry.offset.y, 0), rect.height) : 0);
       const inset = 13;
-      result.rect = rect;
+      result.rect = entry.area ? reviewAreaRect(rect, entry.area) : rect;
       result.marker = {
         x: Math.min(Math.max(x, inset), Math.max(inset, width - inset - (offset * 24))),
         y: Math.min(Math.max(y, inset), Math.max(inset, height - inset)),

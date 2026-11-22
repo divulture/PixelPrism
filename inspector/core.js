@@ -1,6 +1,6 @@
 // Talking to Studio, and finding an element again from what Studio stored about it.
 
-const INSPECTOR_PROTOCOL_VERSION = 82;
+const INSPECTOR_PROTOCOL_VERSION = 96;
 const extensionOrigin = new URL(chrome.runtime.getURL('/')).origin;
 const isStudioMessage = (event, type) => (
   event.source === window.parent
@@ -18,6 +18,11 @@ const detectedPageFramework = (() => {
   }
   return { framework: 'unknown', detectionConfidence: 'none', detectionMethod: 'none' };
 })();
+// The classes the page itself gives an element. A class edit in Studio
+// changes the element's class attribute, but the element is still described
+// and found again as the source has it, so comments and edits made before
+// or after the class edit keep their element.
+const pageClassesOf = (element) => ([...element.classList]);
 const queryOne = (selector) => {
   if (!selector || typeof selector !== 'string') return null;
   try {
@@ -31,7 +36,7 @@ const matchesContext = (element, context = {}) => {
   // A made-up id (React's ":r5:") differs on every load; it proves nothing.
   if (context.id && !GENERATED_ID.test(context.id) && element.id !== context.id) return false;
   if (Array.isArray(context.classes) && context.classes.length
-    && !context.classes.every((name) => element.classList.contains(name))) return false;
+    && !context.classes.every((name) => pageClassesOf(element).includes(name))) return false;
   return true;
 };
 const uniqueAttributeMatch = (context) => {
@@ -67,7 +72,14 @@ const elementForChange = (change) => {
   const byContextSelector = queryOne(context.selector);
   if (byContextSelector && matchesContext(byContextSelector, context)) return byContextSelector;
   const bySelector = queryOne(change?.selector);
-  return bySelector && matchesContext(bySelector, context) ? bySelector : null;
+  if (bySelector && matchesContext(bySelector, context)) return bySelector;
+  // Its place in the page, when the element there has the same domPath: an
+  // edit stored before same-class siblings got :nth-of-type names them all,
+  // and while a class edit is shown the page's selectors name classes the
+  // live element no longer has.
+  const byIndexPath = elementAtIndexPath(context.indexPath);
+  if (byIndexPath && context.domPath && legacyDomPath(domPathFor(byIndexPath)) === legacyDomPath(context.domPath) && matchesContext(byIndexPath, context)) return byIndexPath;
+  return null;
 };
 // Describes an element so it can be found again on a fresh load. Used by
 // the tools and by the click recorder, which runs before they are set up.
@@ -86,7 +98,7 @@ const stableSelectorFor = (element) => {
   for (const name of ['data-testid', 'data-test', 'data-cy', 'data-qa']) {
     if (element.hasAttribute(name)) return `[${name}="${CSS.escape(element.getAttribute(name))}"]`;
   }
-  const classes = [...element.classList]
+  const classes = pageClassesOf(element)
     .filter((name) => !name.startsWith('viewport-parade-'))
     .slice(0, 3)
     .map((name) => `.${CSS.escape(name)}`).join('');
@@ -101,17 +113,30 @@ const domPathFor = (element) => {
   while (current && current.nodeType === Node.ELEMENT_NODE && current !== document.documentElement) {
     const parent = current.parentElement;
     const base = stableSelectorFor(current);
-    const hasStrongIdentity = stableIdOf(current) || [...current.attributes].some((attribute) => /^(data-(testid|test|cy|qa)|name|role)$/.test(attribute.name));
-    if (hasStrongIdentity || current.classList.length) parts.unshift(base);
-    else if (parent) {
-      const sameTag = [...parent.children].filter((child) => child.tagName === current.tagName);
-      parts.unshift(sameTag.length > 1 ? `${base}:nth-of-type(${sameTag.indexOf(current) + 1})` : base);
-    } else parts.unshift(base);
+    // A sibling of the same tag written the same way (five a.text-small in
+    // a nav, two article.card in a grid) makes the step ambiguous: its place
+    // among the tag's siblings tells them apart. Without it two siblings
+    // shared one domPath, and Studio, which keys edits by it, merged their
+    // edits into one record.
+    const sameTag = parent ? [...parent.children].filter((child) => child.tagName === current.tagName) : [];
+    // A bare tag keeps its index whenever the tag repeats, as before.
+    const ambiguous = base === current.tagName.toLowerCase()
+      ? sameTag.length > 1
+      : sameTag.some((child) => child !== current && stableSelectorFor(child) === base);
+    parts.unshift(ambiguous ? `${base}:nth-of-type(${sameTag.indexOf(current) + 1})` : base);
     if (stableIdOf(current)) break;
     current = parent;
   }
   return parts.join(' > ');
 };
+// A domPath as versions before 89 wrote it: they gave :nth-of-type only to
+// a step with no class, id or test attribute (a bare tag). Stored view steps
+// and edits keep that form, so places that compare a stored domPath with a
+// live one compare this form, and the indexPath beside it tells siblings
+// apart.
+const legacyDomPath = (domPath) => String(domPath || '').split(' > ')
+  .map((part) => (/^[a-z][a-z0-9-]*:nth-of-type\(\d+\)$/i.test(part) ? part : part.replace(/:nth-of-type\(\d+\)$/, '')))
+  .join(' > ');
 // Exact position from <html>; it survives repeated class names that make
 // domPath ambiguous. Studio overlays are skipped so they do not shift it.
 const indexPathFor = (element) => {
@@ -143,7 +168,7 @@ const elementContextFor = (element) => {
   return {
     tag: element.tagName.toLowerCase(),
     id: stableIdOf(element) || null,
-    classes: [...element.classList].filter((name) => !name.startsWith('viewport-parade-')).slice(0, 12),
+    classes: pageClassesOf(element).filter((name) => !name.startsWith('viewport-parade-')).slice(0, 12),
     selector: stableSelectorFor(element),
     domPath: domPathFor(element),
     indexPath: indexPathFor(element),

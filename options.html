@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PixelPrism settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main>
+    <h1>Toolbar icon</h1>
+    <p class="note">Show the size of the current tab on the extension icon while you resize the window</p>
+    <fieldset>
+      <legend class="visually-hidden">Toolbar icon</legend>
+      <label><input type="checkbox" data-setting="width"><span>Show viewport width on the icon</span></label>
+      <label><input type="checkbox" data-setting="height"><span>Show viewport height</span></label>
+      <label><input type="checkbox" data-setting="window"><span>Show browser window size</span></label>
+    </fieldset>
+    <p class="note">The number shows while you drag the window and goes away a second after. It counts the side you drag: blue for the width, green for the height. A corner drag shows the width while you move more along X and the height while you move more along Y. The viewport height and the window size show only when their box is on. Hover the icon to see the sizes at any time. With every box off, the icon stays as it was</p>
+  </main>
+  <script src="options.js"></script>
+</body>
+</html>

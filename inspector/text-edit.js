@@ -39,7 +39,8 @@ const textEditLabel = (letter) => {
 };
 
 // What a double click edits: an element that holds only text; text beside
-// child elements is wrapped in a span first, as an edit of its styles does.
+// child elements is wrapped in a span, only as the field to type in. The
+// selection stays on the element that holds it (layers.js).
 const textEditElementAt = (target, x, y) => {
   if (!(target instanceof HTMLElement) || target.closest('[data-viewport-parade-overlay]')) return null;
   if (target.matches('input, textarea, select, option, img, video, canvas, iframe, svg, svg *')) return null;
@@ -180,7 +181,7 @@ const textEditStyle = document.createElement('style');
 // hidden element takes no focus: the field is always visible.
 textEditStyle.textContent = `[${TEXT_EDITING}] { visibility: visible !important; opacity: 1 !important; background: #ffffff !important; color: #18181b !important; -webkit-text-fill-color: #18181b !important; text-shadow: none !important; box-shadow: 0 0 0 4px #ffffff, 0 0 0 6px #2563eb !important; outline: none !important; }`;
 const showTextEditField = (element) => {
-  [marginOverlay, paddingOverlay, gutterLayer].forEach((overlay) => { overlay.style.display = 'none'; });
+  [marginOverlay, paddingOverlay, gutterLayer, label].forEach((overlay) => { overlay.style.display = 'none'; });
   hideSpacing();
   const box = element.getBoundingClientRect();
   contentOverlay.style.border = '2px solid #2563eb';
@@ -202,7 +203,7 @@ const onTextEditKey = (event) => {
 
 const startTextEdit = async (element) => {
   if (textEditing) finishTextEdit(true);
-  await selectLayerElement(element, { exact: true });
+  await selectLayerElement(element, { exact: true, keepText: element });
   const before = element.textContent;
   // Taken before the element turns editable, so its attributes stay out of it.
   const change = textChangeFor(element, editedTexts.has(element) ? editedTexts.get(element) : before, before);

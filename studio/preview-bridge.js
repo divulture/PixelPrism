@@ -99,7 +99,7 @@ window.addEventListener('message', (event) => {
   if (event.data?.source !== 'viewport-parade' || event.data?.type !== 'layers-selected') return;
   setLayersFrame(event.source);
   selectedLayerPath = layerPathKey(event.data.path);
-  selectedLayerText = Number.isInteger(event.data.textIndex) ? event.data.textIndex : null;
+  selectedLayerPseudo = typeof event.data.pseudo === 'string' ? event.data.pseudo : '';
   revealCodeSelection(event.data.path);
   breadcrumbAncestors = Array.isArray(event.data.ancestors) ? event.data.ancestors : [];
   breadcrumbChildren = Array.isArray(event.data.children) ? event.data.children : [];
@@ -207,13 +207,13 @@ window.addEventListener('message', (event) => {
   if (!card || !event.data.element) return;
   const snapshot = typeof event.data.snapshot?.html === 'string' ? event.data.snapshot : null;
   if (placingCommentId && !commentsPanel.hidden) {
-    moveComment(placingCommentId, card, { element: event.data.element, route: event.data.route || '/', steps: event.data.steps, snapshot });
+    moveComment(placingCommentId, card, { element: event.data.element, route: event.data.route || '/', steps: event.data.steps, snapshot, ...commentAreaFrom(event.data) });
     clearInspectorSelections();
     return;
   }
   clearOtherInspectorSelections(event.source);
   const offset = event.data.offset && Number.isFinite(event.data.offset.x) && Number.isFinite(event.data.offset.y) ? event.data.offset : null;
-  commentSelection = { frame: card.querySelector('iframe'), element: event.data.element, offset, route: event.data.route || '/', steps: Array.isArray(event.data.steps) ? event.data.steps : [], snapshot };
+  commentSelection = { frame: card.querySelector('iframe'), element: event.data.element, offset, route: event.data.route || '/', steps: Array.isArray(event.data.steps) ? event.data.steps : [], snapshot, ...commentAreaFrom(event.data) };
   if (!commentsPanel.hidden) renderComments();
   // Comments: the box to write in opens where the element was clicked.
   const point = event.data.point;
@@ -271,6 +271,7 @@ window.addEventListener('message', (event) => {
   if (inspectorFrame?.contentWindow === event.source) {
     hideInspectorPanel();
     selectedLayerPath = undefined;
+    selectedLayerPseudo = '';
     if (!layersPanel.hidden) renderLayersTree();
   }
 });

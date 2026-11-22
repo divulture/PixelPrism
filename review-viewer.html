@@ -56,9 +56,19 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
 .panel-header > div { min-width: 0; }
 .panel-count { flex: none; padding-top: 1px; color: var(--muted); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .panel-count.is-complete { color: var(--done); }
+/* Resolve all shows while the pointer is over the Comments header. */
+.panel-header-end { display: flex; align-items: center; gap: 8px; flex: none; }
+.resolve-all { height: 18px; margin: -2px 0; padding: 0 6px; border: 0; border-radius: 4px; background: transparent; color: var(--focus); font: 600 11px/18px Inter, sans-serif; opacity: 0; pointer-events: none; transition: opacity 120ms ease; }
+.resolve-all:hover { background: var(--hover); }
+.panel-header:hover .resolve-all, .resolve-all:focus-visible { opacity: 1; pointer-events: auto; }
 .panel-header h2 { margin: 0; font-size: 12px; font-weight: 800; }
 .panel-header p { margin: 4px 0 0; overflow: hidden; color: var(--muted); font-size: 11px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .panel-body { flex: 1; min-height: 0; overflow: auto; padding: 0 12px 12px; }
+.comment-tabs { display: flex; flex: none; gap: 20px; margin: 0 12px 12px; border-bottom: 1px solid var(--line); }
+.comment-tab { display: flex; align-items: center; gap: 5px; margin-bottom: -1px; padding: 0 0 10px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font-size: 11px; font-weight: 700; }
+.comment-tab:hover { color: var(--ink); }
+.comment-tab[aria-selected="true"] { border-bottom-color: var(--focus); color: var(--focus); }
+.comment-tab span { font-variant-numeric: tabular-nums; }
 
 .pages-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin: 0; padding: 0; list-style: none; }
 .page-item { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 24px; padding: 0 6px; border: 0; border-radius: 4px; background: transparent; text-align: left; font: 700 11px/1.2 Inter, sans-serif; }
@@ -72,6 +82,13 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
 .page-item-delete { display: grid; flex: none; place-items: center; width: 20px; height: 20px; margin: -2px -2px -2px 0; border-radius: 4px; color: var(--faint); }
 .page-item-delete svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.6; }
 .page-item-delete:hover { background: #fee2e2; color: var(--accent-ink); }
+/* The pencil shows on a page row under the pointer or in focus. */
+.page-item-rename { display: none; flex: none; place-items: center; width: 20px; height: 20px; margin: -2px -4px -2px 0; border-radius: 4px; color: var(--faint); }
+.page-item-rename svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.6; }
+.page-item:hover .page-item-rename, .page-item:focus-visible .page-item-rename { display: grid; }
+.page-item-rename:hover { background: var(--line); color: var(--ink); }
+.page-item.is-renaming { padding-right: 2px; background: var(--hover); }
+.page-item-input { flex: 1 1 auto; min-width: 0; height: 20px; padding: 0 4px; border: 1px solid var(--focus); border-radius: 4px; outline: 0; background: #fff; color: var(--text); font: 700 11px/1.2 Inter, sans-serif; }
 /* A page with several screenshots opens into one row per screenshot. */
 .page-item-toggle { display: grid; flex: none; place-items: center; width: 12px; height: 16px; margin-right: -4px; color: var(--faint); }
 .page-item-toggle svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; transition: transform 120ms ease; }
@@ -91,8 +108,17 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
 .stage-title a { overflow: hidden; color: var(--ink); font-size: 12px; font-weight: 700; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
 .stage-title a:hover { text-decoration: underline; }
 .stage-title span { flex: none; color: var(--muted); font-size: 11px; font-weight: 500; }
-.toolbar-end { grid-column: 2; justify-self: end; display: flex; align-items: center; gap: 8px; min-width: 0; }
-.shot-tools { display: flex; align-items: center; gap: 2px; flex: none; padding: 2px; border: 1px solid var(--line); border-radius: 6px; }
+/* Previous and next screenshot of the page, at the right of the top bar. */
+.screen-nav { grid-column: 2; display: flex; gap: 2px; }
+.screen-nav[hidden] { display: none; }
+.screen-nav button { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--text); }
+.screen-nav button:hover:not(:disabled) { background: var(--hover); }
+.screen-nav button:disabled { color: var(--faint); cursor: default; }
+.screen-nav svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+/* Screenshot tools and zoom float in an island under the screenshot,
+   leaving the top bar to the page's name. */
+.stage-bar { position: absolute; bottom: 12px; left: 50%; z-index: 5; display: flex; align-items: center; gap: 2px; max-width: calc(100% - 24px); padding: 4px; border: 1px solid var(--line); border-radius: 8px; background: #fff; box-shadow: 0 6px 20px rgba(24, 24, 27, .12); transform: translateX(-50%); }
+.shot-tools { display: flex; align-items: center; gap: 2px; flex: none; }
 .shot-tools button { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border: 0; border-radius: 4px; background: transparent; color: var(--text); font-size: 11px; font-weight: 700; white-space: nowrap; }
 .shot-tools button:hover { background: var(--hover); }
 .shot-tools button.icon-only { width: 26px; padding: 0; justify-content: center; }
@@ -118,26 +144,30 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
 .merge-actions button { height: 28px; padding: 0 12px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--text); font: 700 11px Inter, sans-serif; cursor: pointer; }
 .merge-actions button[type="submit"] { border-color: var(--ink); background: var(--ink); color: #fff; }
 .merge-actions button:disabled { opacity: .45; cursor: default; }
+/* Confirming a removal uses the merge dialog's look at a narrower width. */
+.merge-dialog.is-confirm { width: min(400px, calc(100vw - 32px)); }
+.merge-dialog.is-confirm .merge-actions { margin-top: 0; }
+.merge-actions button.is-danger { border-color: var(--accent-ink); background: var(--accent-ink); }
 .stage-wrap.is-drop-target::after { content: "Drop an image to replace this screenshot"; position: absolute; inset: 52px 8px 8px; z-index: 4; display: grid; place-items: center; border: 2px dashed var(--focus); border-radius: 8px; background: rgba(37, 99, 235, .08); color: var(--focus); font-size: 12px; font-weight: 700; pointer-events: none; }
 .stage-wrap.is-drop-target.is-empty-drop::after { content: "Drop an image to add a screenshot"; }
-.notice { position: absolute; bottom: 16px; left: 50%; z-index: 5; display: flex; align-items: center; gap: 10px; max-width: calc(100% - 24px); padding: 6px 6px 6px 12px; border-radius: 6px; background: var(--ink); color: #fff; box-shadow: 0 6px 20px rgba(24, 24, 27, .25); font-size: 11px; font-weight: 600; transform: translateX(-50%); }
+.notice { position: absolute; bottom: 64px; left: 50%; z-index: 5; display: flex; align-items: center; gap: 10px; max-width: calc(100% - 24px); padding: 6px 6px 6px 12px; border-radius: 6px; background: var(--ink); color: #fff; box-shadow: 0 6px 20px rgba(24, 24, 27, .25); font-size: 11px; font-weight: 600; transform: translateX(-50%); }
 .notice.is-error { background: var(--accent-ink); }
 .notice.is-plain { padding-right: 12px; }
 .notice button { height: 24px; padding: 0 8px; border: 0; border-radius: 4px; background: rgba(255, 255, 255, .14); color: #fff; font-size: 11px; font-weight: 700; }
 .notice button:hover { background: rgba(255, 255, 255, .24); }
 .stage-empty button { margin-top: 12px; height: 28px; padding: 0 12px; border: 1px solid var(--ink); border-radius: 6px; background: var(--ink); color: #fff; font-size: 11px; font-weight: 700; }
 .stage-empty button:hover { background: #3f3f46; }
-.zoom { display: flex; align-items: center; gap: 2px; flex: none; padding: 2px; border: 1px solid var(--line); border-radius: 6px; }
+.zoom { display: flex; align-items: center; gap: 2px; flex: none; }
 .zoom button { display: grid; place-items: center; min-width: 26px; height: 24px; padding: 0 6px; border: 0; border-radius: 4px; background: transparent; color: var(--text); font-size: 11px; font-weight: 700; }
 .zoom button:hover { background: var(--hover); }
-.zoom button[aria-pressed="true"] { background: var(--ink); color: #fff; }
 .zoom svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
 .zoom-value { min-width: 48px !important; font-variant-numeric: tabular-nums; }
 .zoom-divider { width: 1px; height: 16px; margin: 0 2px; background: var(--line); }
+.stage-bar .shot-tools + input + .zoom::before { content: ""; width: 1px; height: 16px; margin-right: 6px; background: var(--line); }
 
 .stage { position: relative; min-height: 0; overflow: auto; overscroll-behavior: contain; }
 .stage.is-dragging { cursor: grabbing; user-select: none; }
-.canvas { position: relative; margin: 24px auto; overflow: hidden; background: #fff; box-shadow: 0 0 0 1px rgba(24, 24, 27, .08), 0 8px 28px rgba(24, 24, 27, .12); }
+.canvas { position: relative; margin: 24px auto 64px; overflow: hidden; background: #fff; box-shadow: 0 0 0 1px rgba(24, 24, 27, .08), 0 8px 28px rgba(24, 24, 27, .12); }
 .canvas img { display: block; width: 100%; height: 100%; user-select: none; -webkit-user-drag: none; }
 .overlay { position: absolute; inset: 0; }
 .highlight { position: absolute; border: 2px solid var(--accent); border-radius: 3px; background: rgba(239, 68, 68, .06); box-shadow: 0 0 0 9999px rgba(24, 24, 27, .32); pointer-events: none; transition: left 160ms ease, top 160ms ease, width 160ms ease, height 160ms ease; }
@@ -150,7 +180,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
 .stage-empty { display: grid; place-items: center; height: 100%; padding: 24px; color: var(--muted); font-size: 12px; font-weight: 500; text-align: center; }
 .stage-empty strong { display: block; margin-bottom: 4px; color: var(--ink); font-weight: 700; }
 
-.vp-group + .vp-group { margin-top: 12px; }
+/* A line between screenshots keeps long lists from running together. */
+.vp-group + .vp-group { margin: 12px -12px 0; padding: 12px 12px 0; border-top: 1px solid var(--line); }
 .vp-header { display: flex; align-items: center; gap: 8px; min-width: 0; width: 100%; min-height: 24px; margin: 0 0 4px; padding: 0 6px; border: 0; border-radius: 4px; background: transparent; color: var(--text); text-align: left; font: 700 11px/1.2 Inter, sans-serif; }
 .vp-header:hover, .vp-group.is-active .vp-header { background: var(--hover); }
 .vp-size { min-width: 0; overflow: hidden; color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
@@ -161,6 +192,11 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
 .comment-item.is-selected { background: var(--hover); }
 .comment-item p { display: -webkit-box; margin: 0; overflow: hidden; overflow-wrap: anywhere; color: var(--text); font-size: 12px; font-weight: 500; line-height: 18px; white-space: pre-wrap; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
 .comment-item.is-text-expanded p { display: block; overflow: visible; -webkit-line-clamp: unset; }
+/* The clamp's own ellipsis is easy to miss, so text longer than three
+   lines says so under it. A click on it reaches the card, which toggles. */
+.comment-expand { display: none; justify-self: start; color: var(--focus); font-size: 11px; font-weight: 600; line-height: 16px; }
+.comment-expand:hover { text-decoration: underline; }
+.comment-item.is-clamped .comment-expand { display: block; }
 .comment-item p { cursor: text; user-select: text; }
 .comment-link { color: var(--focus); text-decoration: underline; text-decoration-color: rgba(37, 99, 235, .4); text-underline-offset: 2px; cursor: pointer; }
 .comment-link:hover { text-decoration-color: currentColor; }
@@ -221,7 +257,13 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
 #lightbox-next { grid-column: 3; }
 .lightbox-stage img { grid-column: 2; grid-row: 1; max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 4px; background: #fff; box-shadow: 0 12px 40px rgba(0, 0, 0, .4); }
 .empty-note { margin: 4px 0 0; color: var(--muted); font-size: 11px; font-weight: 500; }
-.footer-note { padding: 10px 12px; border-top: 1px solid var(--line); color: var(--faint); font-size: 10px; font-weight: 600; }
+/* One floating tooltip for [data-tooltip], in Studio's look. The first waits
+   a moment; the next ones show at once. */
+.tooltip { position: fixed; z-index: 20; max-width: 220px; padding: 6px 8px; border-radius: 5px; background: var(--ink); color: #fff; box-shadow: 0 7px 16px rgba(24, 24, 27, .18); font: 400 12px/1.4 Inter, sans-serif; pointer-events: none; }
+.tooltip[hidden] { display: none; }
+.footer-note { padding: 10px 12px; color: var(--faint); font-size: 10px; font-weight: 600; }
+.footer-note a { color: inherit; text-decoration: none; }
+.footer-note a:hover { color: var(--ink); text-decoration: underline; }
 
 @media (max-width: 1100px) {
   .layout { grid-template-columns: 200px minmax(0, 1fr) 280px; }
@@ -249,29 +291,13 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
   </header>
   <div class="layout">
     <aside class="panel pages-panel" aria-labelledby="pages-title">
-      <header class="panel-header"><div><h2 id="pages-title">Pages</h2><p id="pages-meta"></p></div></header>
+      <header class="panel-header"><div><h2 id="pages-title">Pages</h2></div></header>
       <nav class="panel-body"><ol class="pages-list" id="pages-list"></ol></nav>
     </aside>
     <main class="stage-wrap">
       <div class="toolbar">
         <div class="stage-title"><a id="stage-link" target="_blank" rel="noopener noreferrer"></a><span id="stage-meta"></span></div>
-        <div class="toolbar-end">
-        <div class="shot-tools" role="group" aria-label="Screenshot">
-          <button type="button" id="shot-merge" title="Merge other screenshots into this one" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2.5v2c0 2 5 2 5 4M13 2.5v2c0 2-5 2-5 4V14M5.5 11.5L8 14l2.5-2.5"/></svg><span>Merge</span></button>
-          <button type="button" id="shot-replace" title="Replace this screenshot with an image file. You can also paste an image (⌘V) or drop one on the screenshot."><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2.5 11l3.5-3.5 3 3 2-2 2.5 2.5"/><circle cx="10.5" cy="6" r="1"/></svg><span>Replace</span></button>
-          <button type="button" class="icon-only" id="shot-restore" aria-label="Restore the original screenshot" title="Restore the original screenshot" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4v3.5h3.5"/><path d="M3.4 7.2A5 5 0 1 1 4.5 11.5"/></svg></button>
-          <button type="button" class="icon-only" id="page-delete" aria-label="Delete page" title="Delete this page and its comments and changes" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.5 8.5h6l.5-8.5M7 7v3.5M9 7v3.5"/></svg></button>
-        </div>
-        <input type="file" id="shot-file" accept="image/*" hidden>
-        <div class="zoom" role="group" aria-label="Zoom">
-          <button type="button" id="zoom-out" aria-label="Zoom out" title="Zoom out (−)"><svg viewBox="0 0 16 16"><path d="M3.5 8h9"/></svg></button>
-          <button type="button" class="zoom-value" id="zoom-value" title="Reset to 100% (1)">100%</button>
-          <button type="button" id="zoom-in" aria-label="Zoom in" title="Zoom in (+)"><svg viewBox="0 0 16 16"><path d="M3.5 8h9M8 3.5v9"/></svg></button>
-          <span class="zoom-divider"></span>
-          <button type="button" id="zoom-fit" aria-pressed="true" title="Fit to screen (0)">Fit</button>
-          <button type="button" id="zoom-actual" aria-pressed="false" title="Actual size (1)">100%</button>
-        </div>
-        </div>
+        <div class="screen-nav" id="screen-nav" role="group" aria-label="Screenshots" hidden><button type="button" id="screen-prev" aria-label="Previous screenshot" data-tooltip="Previous screenshot ([)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3.5L5.5 8l4.5 4.5"/></svg></button><button type="button" id="screen-next" aria-label="Next screenshot" data-tooltip="Next screenshot (])"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5L10.5 8 6 12.5"/></svg></button></div>
       </div>
       <div class="notice" id="notice" role="status" hidden><span id="notice-text"></span><button type="button" id="notice-action" hidden></button></div>
       <div class="place-hint" id="place-hint" role="status" hidden><span id="place-hint-text"></span><button type="button" id="place-cancel">Cancel</button></div>
@@ -279,14 +305,36 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
         <div class="canvas" id="canvas" hidden><img id="screenshot" alt=""><div class="overlay" id="overlay"></div></div>
         <div class="stage-empty" id="stage-empty" hidden></div>
       </div>
+      <div class="stage-bar">
+        <div class="shot-tools" role="group" aria-label="Screenshot">
+          <button type="button" class="icon-only" id="shot-merge" aria-label="Merge screenshots" data-tooltip="Merge other screenshots into this one" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2.5v2c0 2 5 2 5 4M13 2.5v2c0 2-5 2-5 4V14M5.5 11.5L8 14l2.5-2.5"/></svg></button>
+          <button type="button" class="icon-only" id="shot-replace" aria-label="Replace screenshot" data-tooltip="Replace this screenshot with an image file. You can also paste an image (⌘V) or drop one on the screenshot"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2.5 11l3.5-3.5 3 3 2-2 2.5 2.5"/><circle cx="10.5" cy="6" r="1"/></svg></button>
+          <button type="button" class="icon-only" id="shot-restore" aria-label="Restore the original screenshot" data-tooltip="Restore the original screenshot" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4v3.5h3.5"/><path d="M3.4 7.2A5 5 0 1 1 4.5 11.5"/></svg></button>
+          <button type="button" class="icon-only" id="page-delete" aria-label="Delete page" data-tooltip="Delete this page and its comments and changes" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.5 8.5h6l.5-8.5M7 7v3.5M9 7v3.5"/></svg></button>
+        </div>
+        <input type="file" id="shot-file" accept="image/*" hidden>
+        <div class="zoom" role="group" aria-label="Zoom">
+          <button type="button" id="zoom-out" aria-label="Zoom out" data-tooltip="Zoom out (−)"><svg viewBox="0 0 16 16"><path d="M3.5 8h9"/></svg></button>
+          <button type="button" class="zoom-value" id="zoom-value" data-tooltip="Reset to 100% (1)">100%</button>
+          <button type="button" id="zoom-in" aria-label="Zoom in" data-tooltip="Zoom in (+)"><svg viewBox="0 0 16 16"><path d="M3.5 8h9M8 3.5v9"/></svg></button>
+          <span class="zoom-divider"></span>
+          <button type="button" id="zoom-fit" data-tooltip="Fit to screen (0)">Fit</button>
+          <button type="button" id="zoom-actual" data-tooltip="Actual size (1)">100%</button>
+        </div>
+      </div>
     </main>
     <aside class="panel comments-panel" aria-labelledby="comments-title">
-      <header class="panel-header"><div><h2 id="comments-title">Comments</h2></div><span class="panel-count" id="comments-count" title="Resolved comments"></span></header>
-      <div class="panel-body" id="comments-groups"></div>
-      <div class="footer-note" id="footer-note">Powered by PixelPrism</div>
+      <header class="panel-header"><div><h2 id="comments-title">Comments</h2></div><div class="panel-header-end"><button type="button" class="resolve-all" id="resolve-all" hidden></button><span class="panel-count" id="comments-count" title="Resolved comments"></span></div></header>
+      <div class="comment-tabs" id="comment-tabs" role="tablist" aria-label="Comment status">
+        <button type="button" class="comment-tab" id="comments-open" role="tab" aria-selected="true" aria-controls="comments-groups" data-status="open">Open <span id="comments-open-count">0</span></button>
+        <button type="button" class="comment-tab" id="comments-resolved" role="tab" aria-selected="false" aria-controls="comments-groups" tabindex="-1" data-status="resolved">Resolved <span id="comments-resolved-count">0</span></button>
+      </div>
+      <div class="panel-body" id="comments-groups" role="tabpanel" aria-labelledby="comments-open" tabindex="0"></div>
+      <div class="footer-note" id="footer-note">Powered by <a href="https://github.com/divulture/PixelPrism" target="_blank" rel="noopener noreferrer">PixelPrism</a></div>
     </aside>
   </div>
 </div>
+<div class="tooltip" id="tooltip" role="tooltip" hidden></div>
 <dialog class="merge-dialog" id="merge-dialog" aria-labelledby="merge-title" aria-describedby="merge-description">
   <form id="merge-form">
     <h2 id="merge-title">Merge screenshots</h2>
@@ -294,6 +342,13 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     <div class="merge-list" id="merge-list"></div>
     <p id="merge-error" role="alert" hidden>Could not save the merge. Try again</p>
     <div class="merge-actions"><span id="merge-count" aria-live="polite"></span><button type="button" id="merge-cancel">Cancel</button><button type="submit" id="merge-confirm" disabled>Merge</button></div>
+  </form>
+</dialog>
+<dialog class="merge-dialog is-confirm" id="remove-dialog" aria-labelledby="remove-title" aria-describedby="remove-description">
+  <form id="remove-form">
+    <h2 id="remove-title"></h2>
+    <p id="remove-description"></p>
+    <div class="merge-actions"><button type="button" id="remove-cancel">Cancel</button><button type="submit" class="is-danger" id="remove-confirm">Delete</button></div>
   </form>
 </dialog>
 <dialog class="lightbox" id="lightbox" aria-labelledby="lightbox-caption">
@@ -328,12 +383,13 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
   const DELETED_KEY = `pixelprism-review-deleted:${data.id}`;
   const EDITED_KEY = `pixelprism-review-edited:${data.id}`;
   const REMOVED_KEY = `pixelprism-review-removed:${data.id}`;
+  const RENAMED_KEY = `pixelprism-review-renamed:${data.id}`;
   const CHECK_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg>';
   const DOTS_ICON = '<svg viewBox="0 0 256 256" aria-hidden="true"><path d="M140,128a12,12,0,1,1-12-12A12,12,0,0,1,140,128Zm56-12a12,12,0,1,0,12,12A12,12,0,0,0,196,116ZM60,116a12,12,0,1,0,12,12A12,12,0,0,0,60,116Z"/></svg>';
 
   // scope: null shows every screenshot of the page; an index into
   // pageScreens() shows only that screenshot.
-  const state = { page: 0, viewport: 0, scope: null, open: new Set([0]), shot: 0, selected: null, expanded: null, menu: null, placing: null, editing: null, editText: '', zoom: 1, fit: true, done: new Set(), unsaved: false };
+  const state = { page: 0, viewport: 0, scope: null, status: 'open', open: new Set([0]), shot: 0, selected: null, expanded: null, menu: null, placing: null, editing: null, editText: '', renaming: null, zoom: 1, fit: true, done: new Set(), unsaved: false };
   if (mergedDraft?.version === 1) state.unsaved = true;
   // Checkmarks and points not yet written into the file live in
   // localStorage; once the file is saved, the file is the source of truth.
@@ -413,16 +469,16 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
   const screenIndexOf = (page, viewportIndex, shotIndex) => pageScreens(page)
     .findIndex((screen) => screen.viewportIndex === viewportIndex && screen.shotIndex === shotIndex);
   const currentScreenIndex = () => screenIndexOf(currentPage(), state.viewport, state.shot);
-  // Rows are short so the narrow pages list still shows the tab or menu:
-  // "S2 · D1440 · Filter" is screenshot 2, desktop width 1440. The letter is
-  // the device kind of the row's icon; the full name is in the tooltip.
-  const DEVICE_LETTERS = { phone: 'P', 'phone-wide': 'P', tablet: 'T', laptop: 'L', desktop: 'D' };
-  const screenName = (index, viewport) => [`S${index + 1}`, `${DEVICE_LETTERS[deviceGlyph(viewport.width)]}${viewport.width}`, viewport.state].filter(Boolean).join(' · ');
+  // A screenshot is named by its number and the tab or menu it shows:
+  // "Screenshot 2 · Filter". Its size is on the stage and in the tooltip,
+  // so the lists don't repeat it on every row.
+  const screenName = (index, viewport) => [`Screenshot ${index + 1}`, viewport.state].filter(Boolean).join(' · ');
   // The screenshots whose comments are listed: all of them, or the one picked.
   const visibleScreens = () => pageScreens(currentPage())
     .map((screen, index) => ({ ...screen, index }))
     .filter(({ index }) => state.scope === null || index === state.scope);
-  const visibleEntries = () => visibleScreens().flatMap(screenEntries);
+  const matchesStatus = (entry) => state.done.has(entry.id) === (state.status === 'resolved');
+  const visibleEntries = () => visibleScreens().flatMap(screenEntries).filter(matchesStatus);
 
   // Manual points. The automatic placement is kept in entry.auto so a point
   // can be undone; entry.pin is in page coordinates so the studio can put it
@@ -544,6 +600,29 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     state.unsaved = true;
     return true;
   });
+  // A page's short name in the Pages list, by page address, until the file
+  // is saved. The stage keeps the page's full name; an empty name drops
+  // the short one.
+  const pageName = (page) => page.title || page.label;
+  let renamedDraft = {};
+  try {
+    const stored = JSON.parse(localStorage.getItem(RENAMED_KEY) || '{}');
+    if (stored && typeof stored === 'object' && !Array.isArray(stored)) renamedDraft = stored;
+  } catch { /* See above. */ }
+  const saveRenamedDraft = () => {
+    try { localStorage.setItem(RENAMED_KEY, JSON.stringify(renamedDraft)); } catch { /* See above. */ }
+  };
+  function applyPageTitle(page, title) {
+    const next = title && title !== page.label ? title : undefined;
+    if (next === page.title) return false;
+    if (next) page.title = next;
+    else delete page.title;
+    return true;
+  }
+  Object.entries(renamedDraft).forEach(([url, title]) => {
+    const page = data.pages.find((candidate) => candidate.url === url);
+    if (page && typeof title === 'string' && applyPageTitle(page, title)) state.unsaved = true;
+  });
 
   // Header
   const logo = $('#brand-logo');
@@ -577,7 +656,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     return page.viewports.length > 1 && viewport.entries.length === 0 && viewport.shots.length < 2;
   };
 
-  function pageRow(entries, { className, name, title, width, current, remove }) {
+  const PENCIL_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 3l2.5 2.5L6 12.5H3.5V10z"/></svg>';
+  function pageRow(entries, { className, name, title, width, current, remove, rename }) {
     const done = entries.filter((entry) => state.done.has(entry.id)).length;
     const button = el('button', className);
     button.type = 'button';
@@ -587,6 +667,13 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     const icon = el('span', 'page-item-icon');
     icon.innerHTML = deviceIconSvg(width);
     button.append(icon, el('span', 'page-item-name', name));
+    if (rename !== undefined) {
+      const pencil = el('span', 'page-item-rename');
+      pencil.dataset.rename = String(rename);
+      pencil.title = 'Rename';
+      pencil.innerHTML = PENCIL_ICON;
+      button.append(pencil);
+    }
     if (remove) {
       const trash = el('span', 'page-item-delete');
       trash.dataset.removePage = String(remove.page);
@@ -601,24 +688,63 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     return button;
   }
 
+  // Renaming swaps the page row for a field with the same icon.
+  function renameRow(page, index) {
+    const row = el('div', 'page-item is-renaming');
+    row.dataset.page = String(index);
+    const icon = el('span', 'page-item-icon');
+    icon.innerHTML = deviceIconSvg(page.viewports[0]?.width || 0);
+    const input = el('input', 'page-item-input');
+    input.type = 'text';
+    input.value = pageName(page);
+    input.setAttribute('aria-label', 'Page name');
+    input.placeholder = page.label;
+    row.append(icon, input);
+    return row;
+  }
+
+  function startRename(index) {
+    if (!data.pages[index]) return;
+    state.renaming = index;
+    renderPages();
+    const input = document.querySelector('.page-item-input');
+    input?.focus();
+    input?.select();
+  }
+
+  function finishRename(commit) {
+    const index = state.renaming;
+    if (index === null) return;
+    const page = data.pages[index];
+    const input = document.querySelector('.page-item-input');
+    state.renaming = null;
+    if (commit && page && input && applyPageTitle(page, input.value.trim())) {
+      renamedDraft[page.url] = page.title || '';
+      saveRenamedDraft();
+      markChanged();
+    }
+    renderPages();
+    document.querySelector(`.page-item[data-page="${index}"]:not(.is-screen)`)?.focus();
+  }
+
   // A page with one screenshot is a single row. A page with several opens
   // into a row per screenshot: the page row shows the comments of all of
   // them, a screenshot row only its own.
   function renderPages() {
-    $('#pages-meta').textContent = `${data.pages.length} ${data.pages.length === 1 ? 'page' : 'pages'}`;
     const hasTree = data.pages.some((page) => pageScreens(page).length > 1);
     $('#pages-list').replaceChildren(...data.pages.map((page, index) => {
       const item = el('li');
       const screens = pageScreens(page);
       const isTree = screens.length > 1;
       const isOpen = isTree && state.open.has(index);
-      const button = pageRow(pageEntries(page), {
+      const button = state.renaming === index ? renameRow(page, index) : pageRow(pageEntries(page), {
         className: 'page-item',
-        name: page.label,
-        title: page.url,
+        name: pageName(page),
+        title: page.title ? `${page.label}\n${page.url}` : page.url,
         width: page.viewports[0]?.width || 0,
         current: index === state.page && (state.scope === null || !isTree),
-        remove: null
+        remove: null,
+        rename: index
       });
       button.dataset.page = String(index);
       if (hasTree) {
@@ -763,14 +889,26 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
   }
 
   function renderComments() {
-    const entries = visibleEntries();
+    const entries = visibleScreens().flatMap(screenEntries);
     const done = entries.filter((entry) => state.done.has(entry.id)).length;
     const count = $('#comments-count');
     count.textContent = `${done}/${entries.length}`;
     count.classList.toggle('is-complete', entries.length > 0 && done === entries.length);
+    $('#comments-open-count').textContent = String(entries.length - done);
+    $('#comments-resolved-count').textContent = String(done);
+    $('#comment-tabs').querySelectorAll('[data-status]').forEach((tab) => {
+      const active = tab.dataset.status === state.status;
+      tab.setAttribute('aria-selected', String(active));
+      tab.tabIndex = active ? 0 : -1;
+    });
+    $('#comments-groups').setAttribute('aria-labelledby', `comments-${state.status}`);
+    const resolveAll = $('#resolve-all');
+    resolveAll.hidden = !visibleEntries().length;
+    resolveAll.textContent = state.status === 'resolved' ? 'Unresolve all' : 'Resolve all';
     $('#comments-groups').replaceChildren(...visibleScreens().map((screen) => {
       const { viewport, viewportIndex, shotIndex, index } = screen;
-      const entries = screenEntries(screen);
+      const entries = screenEntries(screen).filter(matchesStatus);
+      if (!entries.length) return null;
       const group = el('section', 'vp-group');
       group.classList.toggle('is-active', viewportIndex === state.viewport && shotIndex === state.shot);
       const header = el('button', 'vp-header');
@@ -780,7 +918,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
       header.append(
         el('span', '', `Screenshot ${index + 1}`),
         // The tab, menu or state (Focus) the screenshot shows, after its size.
-        el('span', 'vp-size', [viewportSize(viewport), viewport.state].filter(Boolean).join(' · ')),
+        el('span', 'vp-size', viewport.state || ''),
         el('span', 'vp-count', String(entries.length))
       );
       const list = el('ol', 'comments-list');
@@ -815,7 +953,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
         } else if (entry.kind === 'change' || entry.text) {
           const paragraph = el('p');
           entryText(entry, paragraph);
-          item.append(paragraph);
+          item.append(paragraph, el('span', 'comment-expand', entry.id === state.expanded ? 'Show less' : 'Show more'));
         }
         // Images attached in the studio: open to view, never removed here.
         const images = Array.isArray(entry.attachments) ? entry.attachments.filter((image) => image?.src) : [];
@@ -899,16 +1037,29 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
       });
       // With one screenshot picked in the pages list, its name there is the header.
       if (state.scope === null) group.append(header);
-      if (entries.length || state.scope === null) group.append(list);
-      else group.append(el('p', 'empty-note', 'No comments on this screenshot'));
+      group.append(list);
       return group;
-    }));
+    }).filter(Boolean));
+    if (!$('#comments-groups').childElementCount) {
+      $('#comments-groups').append(el('p', 'empty-note', state.status === 'resolved' ? 'No resolved comments' : 'No open comments'));
+    }
+    markClampedComments();
     // Near the bottom of the panel the menu opens upwards to stay visible.
     const openMenu = document.querySelector('.comment-menu:not([hidden])');
     if (openMenu) {
       const panelBottom = $('#comments-groups').getBoundingClientRect().bottom;
       openMenu.classList.toggle('is-up', openMenu.getBoundingClientRect().bottom > panelBottom);
     }
+  }
+
+  // Marks comments whose text is longer than the three-line clamp,
+  // expanded or not, so Show more and Show less appear only for them.
+  function markClampedComments() {
+    document.querySelectorAll('.comment-item').forEach((item) => {
+      const text = item.querySelector(':scope > p');
+      const lines = text ? text.scrollHeight / parseFloat(getComputedStyle(text).lineHeight) : 0;
+      item.classList.toggle('is-clamped', lines > 3.1);
+    });
   }
 
   // Stage
@@ -918,12 +1069,14 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
   const overlay = $('#overlay');
   const stageEmpty = $('#stage-empty');
   const STAGE_PADDING = 24;
+  // The tools island covers the bottom of the stage.
+  const STAGE_BAR_SPACE = 64;
 
   function fitZoom() {
     const shot = currentShot();
     if (!shot) return 1;
     const availableWidth = Math.max(80, stage.clientWidth - (STAGE_PADDING * 2));
-    const availableHeight = Math.max(80, stage.clientHeight - (STAGE_PADDING * 2));
+    const availableHeight = Math.max(80, stage.clientHeight - STAGE_PADDING - STAGE_BAR_SPACE);
     return Math.min(1, availableWidth / shot.width, availableHeight / shot.height);
   }
 
@@ -943,8 +1096,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     stage.scrollLeft = (contentX * next) + canvas.offsetLeft - anchorX;
     stage.scrollTop = (contentY * next) + canvas.offsetTop - anchorY;
     $('#zoom-value').textContent = `${Math.round(next * 100)}%`;
-    $('#zoom-fit').setAttribute('aria-pressed', String(state.fit));
-    $('#zoom-actual').setAttribute('aria-pressed', String(!state.fit && Math.abs(next - 1) < 0.001));
   }
 
   function setFit() {
@@ -969,7 +1120,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     overlay.replaceChildren();
     overlay.classList.toggle('has-selection', Boolean(state.selected));
     if (!shot) return;
-    const onShot = viewport.entries.filter((entry) => entryScreen(viewport, entry) === state.shot);
+    const onShot = viewport.entries.filter((entry) => entryScreen(viewport, entry) === state.shot && matchesStatus(entry));
     const selected = onShot.find((entry) => entry.id === state.selected);
     if (selected?.rect?.width && selected.rect.height) {
       const highlight = el('div', 'highlight');
@@ -1004,12 +1155,17 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     // With several screenshots on the page, the stage says which one is shown.
     const screenCount = pageScreens(page).length;
     $('#stage-meta').textContent = [screenCount > 1 ? `Screenshot ${currentScreenIndex() + 1} of ${screenCount}` : '', viewportLabel(viewport), viewport.warning].filter(Boolean).join(' · ');
+    $('#screen-nav').hidden = screenCount < 2;
+    $('#screen-prev').disabled = currentScreenIndex() <= 0;
+    $('#screen-next').disabled = currentScreenIndex() >= screenCount - 1;
     const shot = currentShot();
     $('#shot-merge').hidden = !shot || !mergeCandidates().length;
     canvas.hidden = !shot;
     stageEmpty.hidden = Boolean(shot);
     document.querySelectorAll('.zoom button').forEach((button) => { button.disabled = !shot; });
-    $('#shot-replace span').textContent = shot ? 'Replace' : 'Add';
+    const replace = $('#shot-replace');
+    replace.setAttribute('aria-label', shot ? 'Replace screenshot' : 'Add screenshot');
+    replace.dataset.tooltip = shot ? replace.dataset.tooltip.replace(/^Add a screenshot from an image file/, 'Replace this screenshot with an image file') : replace.dataset.tooltip.replace(/^Replace this screenshot with an image file/, 'Add a screenshot from an image file');
     $('#shot-restore').hidden = !shot?.original;
     if (!shot) {
       const strong = el('strong', '', 'Screenshot unavailable');
@@ -1174,6 +1330,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     saveEditedDraft();
     stopPlacing();
     if (state.editing) { state.editing = null; state.editText = ''; }
+    state.renaming = null;
     state.menu = null;
     const shifted = {};
     Object.entries(shotDraft).forEach(([key, shot]) => {
@@ -1223,6 +1380,24 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     if (stageChanged) renderStage();
     renderOverlay();
     showNotice(removed.viewportIndex === null ? 'Page removed' : 'Screenshot removed');
+  }
+
+  // Removing a page or a screenshot cannot be undone once the file is
+  // saved, so it asks first.
+  const removeDialog = $('#remove-dialog');
+  let pendingRemoval = null;
+  function confirmRemove(pageIndex, viewportIndex = null) {
+    const page = data.pages[pageIndex];
+    if (!page) return;
+    const whole = viewportIndex === null || page.viewports.length === 1;
+    const count = whole ? pageEntries(page).length : 0;
+    pendingRemoval = { pageIndex, viewportIndex };
+    $('#remove-title').textContent = whole ? 'Delete page?' : 'Delete screenshot?';
+    $('#remove-description').textContent = whole
+      ? `“${pageName(page)}” will be removed from the review${count ? ` with its ${count} ${count === 1 ? 'comment' : 'comments'}` : ''}. This cannot be undone`
+      : `This screenshot of “${pageName(page)}” will be removed from the review. This cannot be undone`;
+    removeDialog.showModal();
+    $('#remove-confirm').focus();
   }
 
   function deleteEntry(id) {
@@ -1363,6 +1538,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
         deletedDraft = [];
         editedDraft = {};
         removedDraft = [];
+        renamedDraft = {};
         shotDraft = {};
         shotStore('readwrite', (store) => store.delete(data.id)).catch(() => {});
         mergeStore('readwrite', (store) => store.delete(data.id)).catch(() => {});
@@ -1371,6 +1547,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
           localStorage.removeItem(DELETED_KEY);
           localStorage.removeItem(EDITED_KEY);
           localStorage.removeItem(REMOVED_KEY);
+          localStorage.removeItem(RENAMED_KEY);
           localStorage.removeItem(STORAGE_KEY);
         } catch { /* Nothing to clean up. */ }
       }
@@ -1529,12 +1706,16 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     return frame.viewport.shots.length < 2 ? frame.viewport.entries : frame.viewport.entries.filter((entry) => entryScreen(frame.viewport, entry) === index);
   }
 
+  // Screenshots of the page on display with the current one's size.
   function mergeCandidates() {
+    const page = currentPage();
     const viewport = currentViewport();
     const shot = currentShot();
-    return reviewFrames().filter((frame) => frame.viewport.width === viewport.width && frame.viewport.height === viewport.height
+    return reviewFrames([page]).filter((frame) => frame.viewport.width === viewport.width && frame.viewport.height === viewport.height
       && !(frame.viewport === viewport && frame.shot === shot));
   }
+  // A frame is named as its row in the pages list: "Screenshot 2 · Menu".
+  const frameName = (frame) => screenName(screenIndexOf(frame.page, frame.page.viewports.indexOf(frame.viewport), Math.max(0, frame.viewport.shots.indexOf(frame.shot))), frame.viewport);
 
   const mergeDialog = $('#merge-dialog');
   let mergeOptions = [];
@@ -1562,8 +1743,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
       const input = el('input');
       input.type = 'checkbox';
       input.value = String(index);
-      const shotIndex = Math.max(0, frame.viewport.shots.indexOf(frame.shot));
-      input.setAttribute('aria-label', [frame.page.label, frame.viewport.state, `Screen ${shotIndex + 1}`].filter(Boolean).join(' · '));
+      input.setAttribute('aria-label', frameName(frame));
       const thumbnail = el('span', 'merge-thumbnail');
       if (frame.shot?.src) {
         const image = el('img');
@@ -1574,7 +1754,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
       } else thumbnail.textContent = 'Screenshot unavailable';
       const description = el('span', 'merge-description');
       const count = frameEntries(frame).length;
-      description.append(el('strong', '', [frame.page.label, frame.viewport.state].filter(Boolean).join(' · ')),
+      description.append(el('strong', '', frameName(frame)),
         el('span', '', `${count} comment${count === 1 ? '' : 's'}`));
       row.append(input, thumbnail, description);
       return row;
@@ -1644,8 +1824,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
       editedDraft = {};
       deletedDraft = [];
       removedDraft = [];
+      renamedDraft = {};
       shotDraft = {};
-      [PINS_KEY, EDITED_KEY, DELETED_KEY, REMOVED_KEY].forEach((key) => { try { localStorage.removeItem(key); } catch { /* Optional storage. */ } });
+      [PINS_KEY, EDITED_KEY, DELETED_KEY, REMOVED_KEY, RENAMED_KEY].forEach((key) => { try { localStorage.removeItem(key); } catch { /* Optional storage. */ } });
       await shotStore('readwrite', (store) => store.delete(data.id)).catch(() => {});
       state.page = data.pages.indexOf(target.page);
       state.viewport = target.page.viewports.indexOf(target.viewport);
@@ -1786,10 +1967,38 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
   function toggleDone(id) {
     if (state.done.has(id)) state.done.delete(id);
     else state.done.add(id);
+    if (state.selected === id) {
+      stopPlacing();
+      state.selected = null;
+      state.expanded = null;
+    }
     saveDone();
     markChanged();
     render();
     renderOverlay();
+  }
+
+  // Bulk actions affect only the current status and screenshot scope.
+  function resolveAllShown() {
+    const ids = visibleEntries().map((entry) => entry.id);
+    if (!ids.length) return;
+    const before = new Set(state.done);
+    const resolve = ids.some((id) => !state.done.has(id));
+    ids.forEach((id) => (resolve ? state.done.add(id) : state.done.delete(id)));
+    stopPlacing();
+    state.selected = null;
+    state.expanded = null;
+    saveDone();
+    markChanged();
+    render();
+    renderOverlay();
+    showNotice(resolve ? 'All comments resolved' : 'All comments reopened', { label: 'Undo', action: () => {
+      state.done = before;
+      saveDone();
+      markChanged();
+      render();
+      renderOverlay();
+    } });
   }
 
   function moveSelection(direction) {
@@ -1801,11 +2010,41 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
   }
 
   // Events
+  function selectCommentStatus(status) {
+    if (state.status === status) return;
+    stopPlacing();
+    stopEditing();
+    state.status = status;
+    state.selected = null;
+    state.expanded = null;
+    state.menu = null;
+    renderComments();
+    renderOverlay();
+    $('#comments-groups').scrollTop = 0;
+  }
+  $('#comment-tabs').addEventListener('click', (event) => {
+    const tab = event.target.closest('[data-status]');
+    if (tab) selectCommentStatus(tab.dataset.status);
+  });
+  $('#comment-tabs').addEventListener('keydown', (event) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const status = event.key === 'Home' ? 'open' : event.key === 'End' ? 'resolved' : state.status === 'open' ? 'resolved' : 'open';
+    selectCommentStatus(status);
+    $(`#comments-${status}`).focus();
+  });
   $('#pages-list').addEventListener('click', (event) => {
+    if (event.target.closest('.is-renaming')) return;
     const remove = event.target.closest('[data-remove-page]');
     if (remove) {
       event.stopPropagation();
-      removeReviewTarget(Number(remove.dataset.removePage), remove.dataset.removeViewport === '' ? null : Number(remove.dataset.removeViewport));
+      confirmRemove(Number(remove.dataset.removePage), remove.dataset.removeViewport === '' ? null : Number(remove.dataset.removeViewport));
+      return;
+    }
+    const rename = event.target.closest('[data-rename]');
+    if (rename) {
+      startRename(Number(rename.dataset.rename));
       return;
     }
     const toggle = event.target.closest('[data-toggle]');
@@ -1816,21 +2055,43 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
     const button = event.target.closest('[data-page]');
     if (!button) return;
     const { page, screen } = button.dataset;
+    // The first click re-renders the list, so a double click is read from
+    // the second click's count rather than a dblclick event.
+    if (event.detail === 2 && screen === undefined) {
+      startRename(Number(page));
+      return;
+    }
     selectPage(Number(page), screen === undefined ? null : Number(screen));
+  });
+  // F2 renames a page in the list, as does a double click (see above).
+  $('#pages-list').addEventListener('keydown', (event) => {
+    if (!event.target.matches('.page-item-input')) return;
+    // The field's keys stay in the field: no Delete, arrows or shortcuts.
+    event.stopImmediatePropagation();
+    if (event.key === 'Enter') { event.preventDefault(); finishRename(true); }
+    else if (event.key === 'Escape') { event.preventDefault(); finishRename(false); }
+  });
+  $('#pages-list').addEventListener('focusout', (event) => {
+    if (event.target.matches('.page-item-input')) finishRename(true);
   });
   // Delete removes the page or empty size in focus.
   $('#pages-list').addEventListener('keydown', (event) => {
-    if (event.key !== 'Delete' && event.key !== 'Backspace') return;
     const row = event.target.closest('.page-item');
+    if (event.key === 'F2' && row && event.target === row && row.dataset.screen === undefined) {
+      event.preventDefault();
+      startRename(Number(row.dataset.page));
+      return;
+    }
+    if (event.key !== 'Delete' && event.key !== 'Backspace') return;
     if (row && event.target === row && row.dataset.screen === undefined && canRemovePage()) {
       event.preventDefault();
-      removeReviewTarget(Number(row.dataset.page));
+      confirmRemove(Number(row.dataset.page));
       return;
     }
     const trash = row?.querySelector('[data-remove-page]');
     if (!trash || event.target !== row) return;
     event.preventDefault();
-    removeReviewTarget(Number(trash.dataset.removePage), trash.dataset.removeViewport === '' ? null : Number(trash.dataset.removeViewport));
+    confirmRemove(Number(trash.dataset.removePage), trash.dataset.removeViewport === '' ? null : Number(trash.dataset.removeViewport));
   });
   // Right and Left open and close a page's screenshots, as in a file tree.
   $('#pages-list').addEventListener('keydown', (event) => {
@@ -2017,10 +2278,50 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
   }, { passive: false });
 
   if (!/mac|iphone|ipad/i.test(navigator.userAgentData?.platform || navigator.platform)) {
-    $('#shot-replace').title = $('#shot-replace').title.replace('⌘V', 'Ctrl+V');
+    $('#shot-replace').dataset.tooltip = $('#shot-replace').dataset.tooltip.replace('⌘V', 'Ctrl+V');
   }
   $('#shot-replace').addEventListener('click', pickShotFile);
-  $('#page-delete').addEventListener('click', () => removeReviewTarget(state.page));
+  $('#resolve-all').addEventListener('click', resolveAllShown);
+  $('#screen-prev').addEventListener('click', () => stepScreen(-1));
+  $('#screen-next').addEventListener('click', () => stepScreen(1));
+  const tooltip = $('#tooltip');
+  const tip = { timer: null, owner: null, hiddenAt: 0 };
+  function hideTooltip() {
+    clearTimeout(tip.timer);
+    tip.owner = null;
+    if (!tooltip.hidden) tip.hiddenAt = Date.now();
+    tooltip.hidden = true;
+  }
+  document.addEventListener('pointerover', (event) => {
+    const owner = event.target.closest?.('[data-tooltip]');
+    if (owner === tip.owner) return;
+    if (!owner) { hideTooltip(); return; }
+    clearTimeout(tip.timer);
+    tip.owner = owner;
+    tip.timer = setTimeout(() => {
+      if (!owner.isConnected || owner.disabled) return;
+      tooltip.textContent = owner.dataset.tooltip;
+      tooltip.hidden = false;
+      const box = owner.getBoundingClientRect();
+      const width = tooltip.offsetWidth;
+      const height = tooltip.offsetHeight;
+      tooltip.style.left = `${Math.max(8, Math.min(box.left + box.width / 2 - width / 2, innerWidth - width - 8))}px`;
+      tooltip.style.top = `${box.top - 6 - height < 8 ? box.bottom + 6 : box.top - 6 - height}px`;
+    }, Date.now() - tip.hiddenAt < 400 ? 0 : 350);
+  });
+  document.addEventListener('pointerdown', hideTooltip);
+  document.addEventListener('scroll', hideTooltip, true);
+  $('#page-delete').addEventListener('click', () => confirmRemove(state.page));
+  $('#remove-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const removal = pendingRemoval;
+    pendingRemoval = null;
+    removeDialog.close();
+    if (removal) removeReviewTarget(removal.pageIndex, removal.viewportIndex);
+  });
+  $('#remove-cancel').addEventListener('click', () => removeDialog.close());
+  removeDialog.addEventListener('close', () => { pendingRemoval = null; });
+  removeDialog.addEventListener('keydown', (event) => event.stopPropagation());
   $('#shot-merge').addEventListener('click', openMerge);
   $('#merge-list').addEventListener('change', updateMergeCount);
   $('#merge-form').addEventListener('submit', commitMerge);
@@ -2039,7 +2340,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
   });
   // An image pasted anywhere in the review replaces the screen on display.
   document.addEventListener('paste', (event) => {
-    if (lightbox.open || mergeDialog.open || event.target.closest?.('input, textarea, [contenteditable="true"]')) return;
+    if (lightbox.open || mergeDialog.open || removeDialog.open || event.target.closest?.('input, textarea, [contenteditable="true"]')) return;
     const item = [...(event.clipboardData?.items || [])].find((candidate) => candidate.kind === 'file' && candidate.type.startsWith('image/'));
     if (!item) return;
     event.preventDefault();
@@ -2090,6 +2391,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline
   });
 
   new ResizeObserver(() => { if (state.fit) applyZoom(fitZoom()); }).observe(stage);
+  // Width and the web font change where the text wraps.
+  new ResizeObserver(markClampedComments).observe($('#comments-groups'));
+  document.fonts?.ready.then(markClampedComments);
 
   render();
   renderStage();

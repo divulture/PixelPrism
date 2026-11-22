@@ -26,18 +26,43 @@ function changeState(change) {
   return Object.keys(INSPECTOR_STATE_SUFFIXES).find((state) => selector.endsWith(INSPECTOR_STATE_SUFFIXES[state])) || null;
 }
 
-// Text and an image's alt text are the page's content, not CSS: the same at
-// every width, and never part of a local CSS file.
+// Text, an image's alt text and an element's classes are the page's content,
+// not CSS: the same at every width, and never part of a local CSS file.
 const CONTENT_PROPERTIES = new Set(['text', 'alt']);
 function isContentChange(change) {
   return CONTENT_PROPERTIES.has(change?.property);
 }
 
-function changeKey(change) {
+// An edit is keyed by its element's domPath, so two elements must never
+// share one: since protocol 89 the Inspector gives same-class siblings
+// :nth-of-type. domPath overrides the element's for the older form.
+function changeKey(change, domPath = change.element?.domPath) {
   const selector = changeRuleWithoutPseudo(change);
   const state = Object.values(INSPECTOR_STATE_SUFFIXES).find((suffix) => selector.endsWith(suffix)) || '';
   const pseudo = INSPECTOR_PSEUDO_SUFFIXES[changePseudo(change)] || '';
-  return [change.url, change.viewport.width, change.viewport.height, `${change.element?.domPath || selector}${state}${pseudo}`, change.property].join('\u0000');
+  return [change.url, change.viewport.width, change.viewport.height, `${domPath || selector}${state}${pseudo}`, change.property].join('\u0000');
+}
+
+// A domPath as versions before protocol 89 wrote it (the same as
+// legacyDomPath in inspector/core.js): :nth-of-type only on a bare tag.
+function legacyDomPath(domPath) {
+  return String(domPath || '').split(' > ')
+    .map((part) => (/^[a-z][a-z0-9-]*:nth-of-type\(\d+\)$/i.test(part) ? part : part.replace(/:nth-of-type\(\d+\)$/, '')))
+    .join(' > ');
+}
+
+// An edit stored by an older version for the same element, under its domPath
+// without :nth-of-type. Its place in the page (indexPath) must match too,
+// since that older domPath also named the element's same-class siblings.
+function legacyChangeFor(change) {
+  const domPath = change.element?.domPath;
+  const indexPath = change.element?.indexPath;
+  if (!domPath || !Array.isArray(indexPath)) return null;
+  const older = legacyDomPath(domPath);
+  if (older === domPath) return null;
+  const existing = changeLog.get(changeKey(change, older));
+  if (!existing || existing.element?.domPath !== older || !Array.isArray(existing.element?.indexPath)) return null;
+  return existing.element.indexPath.join('.') === indexPath.join('.') ? existing : null;
 }
 
 function canonicalInspectorUrl(url) {
@@ -79,10 +104,19 @@ function recordInspectorChange(change) {
     // An image that had no alt attribute, not an empty one.
     ...(change.fromMissing === true ? { fromMissing: true } : {}),
     ...(typeof change.workspace === 'string' ? { workspace: change.workspace } : {}),
-    ...(change.device ? { device: String(change.device) } : {})
+    ...(change.device ? { device: String(change.device) } : {}),
+    // When it was last made: the newest edit of a property wins in previews.
+    editedAt: Date.now()
   };
   const key = changeKey(normalized);
-  const existing = changeLog.get(key);
+  let existing = changeLog.get(key);
+  // The element's edit stored by an older version moves to the new key.
+  const legacy = existing ? null : legacyChangeFor(normalized);
+  if (legacy) {
+    changeLog.delete(changeKey(legacy));
+    changeLog.set(key, legacy);
+    existing = legacy;
+  }
   // An empty alt is a value of its own (a decorative image), not a dropped edit.
   const emptyIsValue = normalized.property === 'alt';
   // No alt and an empty one both read as '', but they differ.
@@ -90,7 +124,19 @@ function recordInspectorChange(change) {
   // An empty value means the override was dropped: the page is as it was.
   // So does a revert, the way alt text is reset.
   if (existing) {
+    // The same property of the same element edited through another rule
+    // (its class after the element alone): the newer rule is the edit, and
+    // the older one comes off the previews.
+    if (existing.selector !== normalized.selector && !isContentChange(existing)) {
+      takeChangesOffPreviews([existing]);
+      existing.selector = normalized.selector;
+      existing.sourceHint = normalized.sourceHint;
+      existing.newDeclaration = normalized.newDeclaration;
+    }
     existing.to = normalized.to;
+    existing.editedAt = normalized.editedAt;
+    // The element as it is now, so its text and snippet agree with to.
+    if (normalized.element) existing.element = normalized.element;
     if (change.revert === true || unchanged(existing) || (normalized.to === '' && !emptyIsValue)) changeLog.delete(key);
   } else if (change.revert !== true && !unchanged(normalized) && (normalized.to !== '' || emptyIsValue)) {
     changeLog.set(key, normalized);
@@ -142,6 +188,11 @@ function reconcilePendingChanges(card) {
 // style edits at their page and size, text edits at every width of their page.
 function revertChanges(changes) {
   changes.forEach((change) => changeLog.delete(changeKey(change)));
+  takeChangesOffPreviews(changes);
+  syncChangeUi();
+}
+
+function takeChangesOffPreviews(changes) {
   document.querySelectorAll('.viewport-card').forEach((card) => {
     const pageUrl = canonicalInspectorUrl(card.dataset.loadedUrl || targetUrl);
     const size = { width: Number(card.dataset.viewportWidth), height: Number(card.dataset.viewportHeight) };
@@ -153,7 +204,6 @@ function revertChanges(changes) {
       changes: shown.map(recordedChangeMessage)
     }, '*');
   });
-  syncChangeUi();
 }
 
 // What a preview needs to apply a recorded change, or to undo it. A text
@@ -181,7 +231,10 @@ function contentChangesForPage(card) {
 // The edits already made for this page and size, back in a preview that
 // loaded again (after a workspace switch, a refresh or a link).
 function applyRecordedChanges(card) {
-  const changes = [...changesForViewport(card), ...contentChangesForPage(card)];
+  // In the order they were made, so the newest edit of a property wins.
+  // Edits stored before editedAt keep their stored order.
+  const changes = [...changesForViewport(card), ...contentChangesForPage(card)]
+    .sort((left, right) => (left.editedAt || 0) - (right.editedAt || 0));
   if (!changes.length) return;
   card.querySelector('iframe')?.contentWindow?.postMessage({
     source: 'viewport-parade',

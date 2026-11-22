@@ -67,31 +67,43 @@ const LAYER_ICONS = {
   form: 'M3 2.5h10v11H3zM5.5 5.5h5M5.5 8h5M5.5 10.5h3',
   list: 'M6 4h7.5M6 8h7.5M6 12h7.5M3 4h.01M3 8h.01M3 12h.01',
   'list-item': 'M6 8h7.5M3 8h.01',
-  table: 'M2.5 3h11v10h-11zM2.5 6.5h11M2.5 10h11M7 3v10'
+  table: 'M2.5 3h11v10h-11zM2.5 6.5h11M2.5 10h11M7 3v10',
+  pseudo: 'M3 3h2M7 3h2M11 3h2M3 13h2M7 13h2M11 13h2M3 3v2M3 7v2M3 11v2M13 3v2M13 7v2M13 11v2'
 };
 
 function renderLayersTree() {
   layersTree.replaceChildren();
   layersTree.setAttribute('aria-busy', 'false');
   if (!layersTreeData) return;
+  // ::before and ::after are rows of their own, first and last among the
+  // element's children as they draw; selecting one opens it in the Inspector.
+  const pseudoNode = (node, pseudo) => ({ path: node.path, pseudo, label: `::${pseudo}`, kind: 'pseudo', hidden: Boolean(node.hiddenPseudos?.includes(pseudo)), children: [] });
+  const childrenOf = (node) => {
+    const pseudos = Array.isArray(node.pseudos) ? node.pseudos : [];
+    return [
+      ...pseudos.filter((pseudo) => pseudo === 'before').map((pseudo) => pseudoNode(node, pseudo)),
+      ...(node.children || []),
+      ...pseudos.filter((pseudo) => pseudo === 'after').map((pseudo) => pseudoNode(node, pseudo))
+    ];
+  };
   const makeNode = (node, depth) => {
     const item = document.createElement('div');
-    item.className = `layers-node${node.text || node.textWrapper ? ' is-text' : ''}`;
-    // Bare text carries its parent's path and its index among the parent's
-    // child nodes.
+    item.className = 'layers-node';
     item.dataset.path = layerPathKey(node.path);
-    if (node.text && Number.isInteger(node.textIndex)) item.dataset.textIndex = String(node.textIndex);
+    if (node.pseudo) item.dataset.pseudo = node.pseudo;
     item.setAttribute('role', 'treeitem');
     item.setAttribute('aria-level', String(depth));
-    const hasChildren = node.children?.length > 0;
-    const selectedDescendant = item.dataset.path === ''
+    const nodeChildren = childrenOf(node);
+    const hasChildren = nodeChildren.length > 0;
+    const selectedDescendant = (!node.pseudo && selectedLayerPseudo && item.dataset.path === selectedLayerPath) || (item.dataset.path === ''
       ? selectedLayerPath !== undefined
-      : selectedLayerPath?.startsWith(`${item.dataset.path}.`);
+      : selectedLayerPath?.startsWith(`${item.dataset.path}.`));
     if (hasChildren) item.setAttribute('aria-expanded', String(!collapsedLayerPaths.has(item.dataset.path) && (depth < 3 || selectedDescendant || expandedLayerPaths.has(item.dataset.path))));
     const row = document.createElement('div');
     row.className = 'layers-row';
     row.style.setProperty('--layer-depth', depth - 1);
-    if (item.dataset.path === selectedLayerPath && (node.text ? node.textIndex === selectedLayerText : selectedLayerText === null)) row.classList.add('is-selected');
+    if (item.dataset.path === selectedLayerPath && (node.pseudo || '') === selectedLayerPseudo) row.classList.add('is-selected');
+    if (node.hidden) row.classList.add('is-hidden');
     if (hasChildren) {
       const expand = document.createElement('button');
       expand.type = 'button';
@@ -120,12 +132,21 @@ function renderLayersTree() {
     comment.setAttribute('aria-label', `Comment on ${node.label}`);
     comment.dataset.tooltip = 'Comment';
     comment.innerHTML = window.phosphorIcon('chat-circle-text');
+    // Hides or shows the layer with a Display edit; body stays shown.
+    const eye = document.createElement('button');
+    eye.type = 'button';
+    eye.className = 'layers-visibility';
+    eye.setAttribute('aria-pressed', String(Boolean(node.hidden)));
+    eye.setAttribute('aria-label', `${node.hidden ? 'Show' : 'Hide'} ${node.label}`);
+    eye.dataset.tooltip = node.hidden ? 'Show' : 'Hide';
+    eye.innerHTML = window.phosphorIcon(node.hidden ? 'eye-slash' : 'eye');
     row.append(icon, select, comment);
+    if (node.kind !== 'body') row.append(eye);
     item.append(row);
     if (hasChildren && item.getAttribute('aria-expanded') === 'true') {
       const children = document.createElement('div');
       children.className = 'layers-children';
-      node.children.forEach((child) => children.append(makeNode(child, depth + 1)));
+      nodeChildren.forEach((child) => children.append(makeNode(child, depth + 1)));
       item.append(children);
     }
     return item;
@@ -136,7 +157,7 @@ function renderLayersTree() {
 
 function revealSelectedLayer() {
   if (!selectedLayerPath) return;
-  const row = layersTree.querySelector(`[data-path="${CSS.escape(selectedLayerPath)}"] > .layers-row`);
+  const row = layersTree.querySelector('.layers-row.is-selected');
   row?.scrollIntoView({ block: 'nearest' });
 }
 
@@ -150,25 +171,39 @@ function expandLayerAncestors(path) {
   }, '');
 }
 
-function selectLayer(path, textIndex = null) {
+function selectLayer(path, pseudo = '') {
   if (!layersFrame) return;
   trackProductEvent('layer_selected');
   selectedLayerPath = path;
-  selectedLayerText = textIndex;
+  selectedLayerPseudo = pseudo;
   expandLayerAncestors(path);
-  layersFrame.postMessage({ source: 'viewport-parade', type: 'layers-select', path: layerPathArray(path), ...(textIndex === null ? {} : { textIndex }) }, '*');
+  // A ::before or ::after row lives inside its element's row.
+  if (pseudo) {
+    expandedLayerPaths.add(path);
+    collapsedLayerPaths.delete(path);
+  }
+  layersFrame.postMessage({ source: 'viewport-parade', type: 'layers-select', path: layerPathArray(path), pseudo }, '*');
   renderLayersTree();
+}
+
+// The eye on a row: the preview selects the layer and records the Display
+// edit, so the Inspector opens on it and the change reaches the agent.
+function setLayerHidden(path, pseudo, hidden) {
+  if (!layersFrame) return;
+  selectedLayerPath = path;
+  selectedLayerPseudo = pseudo;
+  if (!inspectorModeActive) setInspectorMode(true);
+  layersFrame.postMessage({ source: 'viewport-parade', type: 'layers-set-hidden', path: layerPathArray(path), pseudo, hidden }, '*');
 }
 
 // A layer commented on from Layers: Comments opens and the box to write in
 // appears at the element's corner, as if the element had been clicked.
-function commentOnLayer(path, textIndex = null) {
+function commentOnLayer(path) {
   if (!layersFrame) return;
   const frame = layersFrame;
   setCommentsOpen(true);
   selectedLayerPath = path;
-  selectedLayerText = textIndex;
-  frame.postMessage({ source: 'viewport-parade', type: 'layers-select', path: layerPathArray(path), ...(textIndex === null ? {} : { textIndex }) }, '*');
+  frame.postMessage({ source: 'viewport-parade', type: 'layers-select', path: layerPathArray(path) }, '*');
 }
 
 // Breadcrumbs of the selected element, at the bottom while one is selected:
@@ -239,11 +274,10 @@ function renderBreadcrumbs() {
   breadcrumbs.parentElement.scrollLeft = breadcrumbs.parentElement.scrollWidth;
 }
 
-function hoverLayer(path, textIndex = null) {
-  const key = path === null ? null : `${path}~${textIndex ?? ''}`;
-  if (!layersFrame || hoveredLayerPath === key) return;
-  hoveredLayerPath = key;
-  layersFrame.postMessage({ source: 'viewport-parade', type: 'layers-hover', path: path === null ? null : layerPathArray(path), ...(textIndex === null ? {} : { textIndex }) }, '*');
+function hoverLayer(path) {
+  if (!layersFrame || hoveredLayerPath === path) return;
+  hoveredLayerPath = path;
+  layersFrame.postMessage({ source: 'viewport-parade', type: 'layers-hover', path: path === null ? null : layerPathArray(path) }, '*');
 }
 
 function clearInspectorSelections() {
@@ -278,18 +312,18 @@ layersTree.addEventListener('click', (event) => {
     renderLayersTree();
     return;
   }
-  if (event.target.closest('.layers-comment')) commentOnLayer(item.dataset.path, layerTextIndex(item));
-  else if (event.target.closest('.layers-select')) selectLayer(item.dataset.path, layerTextIndex(item));
+  const eye = event.target.closest('.layers-visibility');
+  if (eye) setLayerHidden(item.dataset.path, item.dataset.pseudo || '', eye.getAttribute('aria-pressed') !== 'true');
+  else if (event.target.closest('.layers-comment')) commentOnLayer(item.dataset.path);
+  else if (event.target.closest('.layers-select')) selectLayer(item.dataset.path, item.dataset.pseudo || '');
 });
-// The text a Layers row stands for, or null for an element row.
-const layerTextIndex = (item) => (item.dataset.textIndex === undefined ? null : Number(item.dataset.textIndex));
 layersTree.addEventListener('pointerover', (event) => {
   const item = event.target.closest('.layers-node');
-  if (item) hoverLayer(item.dataset.path, layerTextIndex(item));
+  if (item) hoverLayer(item.dataset.path);
 });
 layersTree.addEventListener('pointerleave', () => hoverLayer(null));
 layersTree.addEventListener('focusin', (event) => {
   const item = event.target.closest('.layers-node');
-  if (item) hoverLayer(item.dataset.path, layerTextIndex(item));
+  if (item) hoverLayer(item.dataset.path);
 });
 layersTree.addEventListener('focusout', () => hoverLayer(null));

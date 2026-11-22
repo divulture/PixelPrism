@@ -194,9 +194,11 @@ const currentViewSteps = () => {
   pruneViewSteps();
   return viewSteps.slice();
 };
-// Which control a view step pressed. Icon buttons side by side (Export,
-// Settings) can share one domPath; their place in the page tells them apart.
-const stepControlKey = (context) => (context ? `${context.domPath || context.selector || ''}|${Array.isArray(context.indexPath) ? context.indexPath.join('.') : ''}` : '');
+// Which control a view step pressed: its domPath in the older form (steps
+// stored before same-class siblings got :nth-of-type still match the live
+// control) and its place in the page, which tells such siblings (icon
+// buttons side by side: Export, Settings) apart.
+const stepControlKey = (context) => (context ? `${legacyDomPath(context.domPath) || context.selector || ''}|${Array.isArray(context.indexPath) ? context.indexPath.join('.') : ''}` : '');
 const recordViewStep = (step, control, popup = null) => {
   const path = `${location.pathname}${location.search}`;
   if (path !== viewStepsPath) {
